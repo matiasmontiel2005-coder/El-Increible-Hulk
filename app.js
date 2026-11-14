@@ -179,8 +179,19 @@ function toast(msg, ms = 2600) {
   const el = $('#toast'); el.textContent = msg; el.classList.remove('hidden');
   clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.add('hidden'), ms);
 }
-function openModal(html) { const m = $('#modal'); m.innerHTML = `<div class="sheet">${html}</div>`; m.classList.remove('hidden'); }
-function closeModal() { $('#modal').classList.add('hidden'); $('#modal').innerHTML = ''; }
+function openModal(html) {
+  const m = $('#modal'), again = !m.classList.contains('hidden') && !m.classList.contains('closing');
+  clearTimeout(closeModal.t);
+  m.innerHTML = `<div class="sheet${again ? ' again' : ''}">${html}</div>`;
+  [...m.firstElementChild.children].forEach((c, i) => c.style.setProperty('--n', Math.min(i, 10)));
+  m.classList.remove('hidden', 'closing'); document.body.classList.add('sheet-open');
+}
+function closeModal() {
+  const m = $('#modal'); if (m.classList.contains('hidden')) return;
+  document.body.classList.remove('sheet-open'); m.classList.add('closing');
+  clearTimeout(closeModal.t);
+  closeModal.t = setTimeout(() => { m.classList.add('hidden'); m.classList.remove('closing'); m.innerHTML = ''; }, 320);
+}
 const mv = id => $('#' + id, $('#modal'))?.value;
 const val = id => document.getElementById(id)?.value;
 
@@ -715,21 +726,27 @@ function needAuth() { return sb && !user && !localStorage.getItem(LS_LOCAL); }
 
 function render(keepScroll = false) {
   const y = window.scrollY;
-  killCharts();
   const r = route();
+  const tabIdx = k => TABS.findIndex(t => t[0] === k);
+  const target = V[r] && !r.startsWith('prog_') ? r : 'foro';
+  const slide = !keepScroll && !!ui.lastRoute && ui.lastRoute !== target && r !== 'auth' && !needAuth();
+  const ghost = slide ? Motion.ghost($('#view')) : null; // captura la pantalla actual antes de reemplazarla
+  killCharts();
   const authMode = needAuth() || r === 'auth';
   $('.top').classList.toggle('hidden', authMode); $('#tabs').classList.toggle('hidden', authMode);
   const view = $('#view');
   if (authMode) { view.innerHTML = V.auth(); return; }
   const name = V[r] && !r.startsWith('prog_') ? r : 'foro';
   view.innerHTML = V[name]();
-  Motion.setNav(name, TABS); Motion.enter(view, !keepScroll);
+  window.scrollTo(0, keepScroll ? y : 0);
+  const dir = tabIdx(name) >= tabIdx(ui.lastRoute) ? 1 : -1;
+  Motion.setNav(name, TABS); Motion.enter(view, !keepScroll, { dir, slide });
+  if (ghost) Motion.leave(ghost, dir);
   if (!keepScroll && ui.lastRoute !== name) { Motion.sweep(); ui.lastRoute = name; }
   const x = xpInfo(); $('#rankChip').textContent = `${x.roman} · ${x.rank.name}`;
   if (name === 'progreso') afterProgreso();
   if (name === 'correr') afterCorrer();
   if (name === 'arena') afterArena();
-  window.scrollTo(0, keepScroll ? y : 0);
 }
 
 /* ---------- Acciones ---------- */
