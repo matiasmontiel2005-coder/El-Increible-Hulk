@@ -33,6 +33,7 @@ const RANKS = [
   { min: 3500, name: 'Legado', icon: '⚜' },
   { min: 7000, name: 'Emperador', icon: '👑' }
 ];
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
 const MEASURES = {
   peso: { name: 'Peso corporal', unit: 'kg' }, brazo: { name: 'Brazo', unit: 'cm' }, pecho: { name: 'Pecho', unit: 'cm' },
   cintura: { name: 'Cintura', unit: 'cm' }, cadera: { name: 'Cadera', unit: 'cm' }, muslo: { name: 'Muslo', unit: 'cm' },
@@ -40,8 +41,8 @@ const MEASURES = {
 };
 const LATIN = ['Per aspera ad astra.', 'Fortes fortuna adiuvat.', 'Si vis pacem, para bellum.', 'Citius, altius, fortius.',
   'Veni, vidi, vici.', 'Ad victoriam.', 'Disciplina est victoria.', 'Audentes fortuna iuvat.', 'Vincit qui se vincit.'];
-const TABS = [['foro', '🏛', 'Foro'], ['rutina', '📜', 'Rutina'], ['entrenar', '⚔', 'Entrenar'],
-  ['progreso', '📈', 'Progreso'], ['metas', '🏆', 'Metas'], ['correr', '👟', 'Correr']];
+const TABS = [['foro', 'Foro'], ['rutina', 'Rutina'], ['entrenar', 'Entrenar'], ['progreso', 'Progreso'],
+  ['metas', 'Metas'], ['correr', 'Correr'], ['arena', 'Arena']];
 
 /* ---------- Utilidades ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -65,7 +66,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /* ---------- Estado ---------- */
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
-  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [],
+  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true },
   active: null, settings: { rest: 90 }, strava: { connected: false, lastSync: 0 }
 });
 let state = emptyState();
@@ -128,7 +129,7 @@ function xpInfo() {
   const xp = Math.round(state.sessions.length * 20 + sets + km * 3 + prs * 30 + goalsDone * 100);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
-  return { xp, rank: cur, next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
+  return { xp, rank: cur, roman: ROMAN[i], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
 }
 
 function latestBody(type) { return state.body.filter(b => b.type === type).sort((a, b) => a.date.localeCompare(b.date)).pop() || null; }
@@ -193,10 +194,10 @@ function chartBase(extra = {}) {
   return Object.assign({
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
-    scales: { x: { grid: { color: '#241d17' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#241d17' }, beginAtZero: false } }
+    scales: { x: { grid: { color: '#24211c' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#24211c' }, beginAtZero: false } }
   }, extra);
 }
-const GOLD = '#c9a24b', GOLDHI = '#f1d58a', RED = '#a52a2a', REDHI = '#d14343';
+const GOLD = '#c8a45a', GOLDHI = '#e6cf94', RED = '#8e2b2b', REDHI = '#c24a4a';
 function lineDs(label, data, color = GOLD, fill = true) {
   return { label, data, borderColor: color, backgroundColor: color + '33', pointBackgroundColor: color, tension: .25, fill, pointRadius: 3, borderWidth: 2 };
 }
@@ -215,6 +216,7 @@ async function pushRemote() {
     state.owner = user.id;
     const { error } = await sb.from('user_data').upsert({ user_id: user.id, data: state, updated_at: new Date().toISOString() });
     if (error) throw error;
+    await pushProfile();
     setSyncBadge('ok');
   } catch (e) { console.warn('push', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
 }
@@ -231,7 +233,7 @@ async function initialSync() {
     const remote = await pullRemote();
     if (remote && (remote.updated || 0) > (state.updated || 0)) {
       state = Object.assign(emptyState(), remote); state.owner = user.id; save(false);
-      setSyncBadge('ok');
+      await pushProfile(); setSyncBadge('ok');
     } else { await pushRemote(); }
   } catch (e) { console.warn('sync', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
   syncing = false;
@@ -303,7 +305,7 @@ function tickRest() {
     toast('¡A la batalla! Descanso terminado'); return;
   }
   el.classList.remove('hidden');
-  el.innerHTML = `<span>🛡</span><span class="t">${Math.floor(left / 60)}:${pad(left % 60)}</span><span class="grow muted small">Descanso</span>
+  el.innerHTML = `<span class="t">${Math.floor(left / 60)}:${pad(left % 60)}</span><span class="grow muted small">Descanso</span>
     <button class="btn-sm" data-act="rest+">+15s</button><button class="btn-sm btn-ghost" data-act="rest-stop">Saltar</button>`;
 }
 function beep() {
@@ -331,7 +333,7 @@ V.foro = () => {
   const active = state.active;
   return `
   <div class="card gold hero">
-    <div class="laurel">${x.rank.icon}</div>
+    <div class="laurel">${x.roman}</div>
     <div class="rank-name">${x.rank.name}</div>
     <div class="muted small" style="margin:4px 0 10px">${x.xp} puntos de gloria${x.next ? ` · faltan ${x.next.min - x.xp} para ${x.next.name}` : ' · rango máximo'}</div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
@@ -350,7 +352,7 @@ V.foro = () => {
     <div class="card stat"><b>${x.prs}</b><span>Récords</span></div>
   </div>
   <h2>Campañas</h2>
-  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><span class="big">🏆</span>Sin campañas activas.<br><a href="#/metas" class="gold-t">Fijá tu primer objetivo</a></div>`}`;
+  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><span class="big">···</span>Sin campañas activas.<br><a href="#/metas" class="gold-t">Fijá tu primer objetivo</a></div>`}`;
 };
 
 function goalTitle(g) {
@@ -364,7 +366,7 @@ const GOAL_ICON = { strength: '🏋', body: '📏', run: '👟', habit: '🔥' }
 function goalCard(g, p, compact = false) {
   const [lab, cls] = STATUS_LABEL[p.status];
   return `<div class="card ${p.status === 'cumplida' ? 'gold' : ''}">
-    <div class="row between"><h3>${GOAL_ICON[g.type]} ${esc(goalTitle(g))}</h3><span class="tag ${cls}">${lab}</span></div>
+    <div class="row between"><h3>${esc(goalTitle(g))}</h3><span class="tag ${cls}">${lab}</span></div>
     <div class="muted small" style="margin:6px 0">${esc(p.txt)}</div>
     <div class="bar ${p.status === 'cumplida' ? 'done' : p.status === 'atrasada' || p.status === 'vencida' ? 'late' : ''}"><i style="width:${Math.round(p.pct * 100)}%"></i></div>
     <div class="row between small muted" style="margin-top:6px"><span>${Math.round(p.pct * 100)}% · tiempo ${Math.round(p.elapsed * 100)}%</span>
@@ -395,9 +397,9 @@ V.rutina = () => {
       <div><label>Reps</label><input type="number" inputmode="numeric" min="1" data-in="rt" data-id="${it.id}" data-f="reps" value="${it.reps ?? ''}"></div>
       <div><label>Peso (kg)</label><input type="number" inputmode="decimal" min="0" step="0.5" data-in="rt" data-id="${it.id}" data-f="weight" value="${it.weight ?? ''}"></div>
     </div>
-  </div>`).join('') : `<div class="card empty"><span class="big">📜</span>${DAYS[d]} está vacío.<br>Agregá ejercicios o dejalo como día de descanso.</div>`}
+  </div>`).join('') : `<div class="card empty"><span class="big">···</span>${DAYS[d]} está vacío.<br>Agregá ejercicios o dejalo como día de descanso.</div>`}
   <button class="btn-primary btn-block" data-act="radd">+ Añadir ejercicio</button>
-  ${r.items.length ? `<button class="btn-block" style="margin-top:10px" data-act="start-day" data-day="${d}">⚔ Entrenar este día ahora</button>
+  ${r.items.length ? `<button class="btn-block" style="margin-top:10px" data-act="start-day" data-day="${d}">Entrenar este día ahora</button>
   <button class="btn-block btn-ghost" style="margin-top:10px" data-act="rcopy">Copiar este día a otro…</button>` : ''}`;
 };
 
@@ -421,9 +423,9 @@ function startView() {
     const vol = s.entries.reduce((a, e) => a + e.sets.reduce((b, x) => b + (x.w || 0) * (x.r || 0), 0), 0);
     return `<div class="list-item"><div class="grow"><b>${esc(s.name)}</b>${s.prs?.length ? `<span class="pr">${s.prs.length} PR</span>` : ''}
       <div class="muted small">${fmtD(s.date)} · ${s.entries.length} ejercicios · ${sets} series · ${Math.round(vol)} kg volumen${s.dur ? ' · ' + s.dur + ' min' : ''}</div></div>
-      <button class="btn-sm icon-btn" data-act="sess-view" data-id="${s.id}">👁</button>
+      <button class="btn-sm icon-btn" data-act="sess-view" data-id="${s.id}">Ver</button>
       <button class="btn-sm icon-btn btn-danger" data-act="sess-del" data-id="${s.id}">✕</button></div>`;
-  }).join('')}</div>` : `<div class="card empty"><span class="big">⚔</span>Aún no hay batallas registradas.</div>`}`;
+  }).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Aún no hay batallas registradas.</div>`}`;
 }
 function liveView() {
   const a = state.active;
@@ -458,7 +460,7 @@ V.progreso = () => {
 };
 V.prog_fuerza = () => {
   const withHist = allEx().filter(e => exHistory(e.id).length);
-  if (!withHist.length) return `<div class="card empty"><span class="big">📈</span>Todavía no hay datos de fuerza.<br>Completá series en <a class="gold-t" href="#/entrenar">Entrenar</a> y acá aparecerá tu evolución.</div>`;
+  if (!withHist.length) return `<div class="card empty"><span class="big">···</span>Todavía no hay datos de fuerza.<br>Completá series en <a class="gold-t" href="#/entrenar">Entrenar</a> y acá aparecerá tu evolución.</div>`;
   if (!ui.exId || !withHist.some(e => e.id === ui.exId)) ui.exId = withHist[0].id;
   const h = exHistory(ui.exId);
   const best = Math.max(...h.map(x => x.best));
@@ -489,11 +491,11 @@ V.prog_cuerpo = () => {
   ${list.length ? `<div class="card"><h3>${m.name}</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card">${list.slice().reverse().slice(0, 12).map(b => `<div class="list-item"><div class="grow"><b>${fmtN(b.value)} ${m.unit}</b><div class="muted small">${fmtD(b.date)}</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="body-del" data-id="${b.id}">✕</button></div>`).join('')}</div>`
-    : `<div class="card empty"><span class="big">📏</span>Sin registros de ${m.name.toLowerCase()}.</div>`}`;
+    : `<div class="card empty"><span class="big">···</span>Sin registros de ${m.name.toLowerCase()}.</div>`}`;
 };
 V.prog_constancia = () => {
   const t = today(), ws = weekStart(t);
-  let streak = 0; for (let w = 0; w < 200; w++) { const s = addDays(ws, -7 * w); const n = [...trainingDates()].filter(d => d >= s && d <= addDays(s, 6)).length; if (n) streak++; else if (w > 0) break; else continue; }
+  const streak = streakWeeks();
   const total = state.sessions.length;
   const vol = state.sessions.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.filter(x => x.done || true).reduce((c, x) => c + (x.w || 0) * (x.r || 0), 0), 0), 0);
   return `<div class="grid3"><div class="card stat"><b>${total}</b><span>Sesiones</span></div>
@@ -507,7 +509,7 @@ function afterProgreso() {
     const h = exHistory(ui.exId); if (!h.length) return;
     const labels = h.map(x => fmtD(x.date));
     drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), GOLD), lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), REDHI, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } } }) });
-    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RED, borderColor: GOLD, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#241d17' } }, y: { grid: { color: '#241d17' }, beginAtZero: true } } }) });
+    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RED, borderColor: GOLD, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
   } else if (ui.progTab === 'cuerpo') {
     const list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date));
     if (list.length) drawChart('ch1', { type: 'line', data: { labels: list.map(b => fmtD(b.date)), datasets: [lineDs(MEASURES[ui.bodyType].name, list.map(b => b.value))] }, options: chartBase() });
@@ -519,9 +521,9 @@ function afterProgreso() {
       gym.push(ss.length); run.push(state.runs.filter(x => x.date >= s && x.date <= e).length);
       vol.push(Math.round(ss.reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((c, y) => c + (y.w || 0) * (y.r || 0), 0), 0), 0)));
     }
-    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: '#241d17' } }, y: { stacked: true, grid: { color: '#241d17' }, ticks: { precision: 0 }, beginAtZero: true } } });
+    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: '#24211c' } }, y: { stacked: true, grid: { color: '#24211c' }, ticks: { precision: 0 }, beginAtZero: true } } });
     drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ label: 'Gimnasio', data: gym, backgroundColor: RED, borderRadius: 4 }, { label: 'Running', data: run, backgroundColor: GOLD, borderRadius: 4 }] }, options: opt });
-    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: '#241d17' } }, y: { grid: { color: '#241d17' }, beginAtZero: true } } }) });
+    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
   }
 }
 
@@ -532,7 +534,7 @@ V.metas = () => {
   items.sort((a, b) => order[a.p.status] - order[b.p.status] || a.g.deadline.localeCompare(b.g.deadline));
   return `<h1>Campañas</h1><p class="sub">Objetivos con meta y fecha límite. El progreso se calcula solo con tus entrenos.</p>
   <button class="btn-primary btn-block" data-act="goal-new" style="margin-bottom:14px">+ Nueva campaña</button>
-  ${items.length ? items.map(({ g, p }) => goalCard(g, p)).join('') : `<div class="card empty"><span class="big">🏆</span>No hay campañas. Un guerrero sin objetivo es un turista.</div>`}`;
+  ${items.length ? items.map(({ g, p }) => goalCard(g, p)).join('') : `<div class="card empty"><span class="big">···</span>No hay campañas. Un guerrero sin objetivo es un turista.</div>`}`;
 };
 function goalForm(type = 'strength') {
   const tabs = [['strength', 'Fuerza'], ['body', 'Cuerpo'], ['run', 'Running'], ['habit', 'Constancia']]
@@ -560,11 +562,11 @@ V.correr = () => {
   const t = today(), since = addDays(t, -30);
   const m = runs.filter(r => r.date >= since);
   const km = m.reduce((a, r) => a + r.km, 0), min = m.reduce((a, r) => a + r.min, 0);
-  const strava = !CFG.STRAVA_CLIENT_ID || !sb ? `<div class="card"><h3>👟 Adidas Running → Strava</h3><p class="muted small">Para importar tus carreras automáticamente hay que configurar Supabase y Strava (guía en el README). Mientras tanto podés cargarlas a mano.</p></div>`
-    : !user ? `<div class="card"><h3>👟 Strava</h3><p class="muted small">Iniciá sesión con tu cuenta para conectar Strava.</p></div>`
-    : state.strava.connected ? `<div class="card gold"><div class="row between"><div><h3>👟 Strava conectado</h3><div class="muted small">${state.strava.lastSync ? 'Última sync: ' + new Date(state.strava.lastSync * 1000).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin sincronizar aún'}</div></div>
+  const strava = !CFG.STRAVA_CLIENT_ID || !sb ? `<div class="card"><h3>Adidas Running → Strava</h3><p class="muted small">Para importar tus carreras automáticamente hay que configurar Supabase y Strava (guía en el README). Mientras tanto podés cargarlas a mano.</p></div>`
+    : !user ? `<div class="card"><h3>Strava</h3><p class="muted small">Iniciá sesión con tu cuenta para conectar Strava.</p></div>`
+    : state.strava.connected ? `<div class="card gold"><div class="row between"><div><h3>Strava conectado</h3><div class="muted small">${state.strava.lastSync ? 'Última sync: ' + new Date(state.strava.lastSync * 1000).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin sincronizar aún'}</div></div>
       <button data-act="strava-sync">Sincronizar</button></div></div>`
-    : `<div class="card gold"><h3>👟 Conectar Strava</h3><p class="muted small">En la app Adidas Running activá Ajustes → Apps conectadas → Strava (una sola vez). Después conectá Strava acá y tus carreras llegarán solas.</p>
+    : `<div class="card gold"><h3>Conectar Strava</h3><p class="muted small">En la app Adidas Running activá Ajustes → Apps conectadas → Strava (una sola vez). Después conectá Strava acá y tus carreras llegarán solas.</p>
       <button class="btn-primary btn-block" data-act="strava-connect">Conectar con Strava</button></div>`;
   return `<h1>Correr</h1><p class="sub">Tus carreras de Adidas Running, vía Strava, o cargadas a mano.</p>${strava}
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Salidas</span></div><div class="card stat"><b>${fmtPace(min, km)}</b><span>Ritmo medio</span></div></div>
@@ -573,15 +575,15 @@ V.correr = () => {
   <button class="btn-primary btn-block" data-act="run-new" style="margin-bottom:12px">+ Registrar carrera a mano</button>
   ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item"><div class="grow"><b>${fmtN(r.km, 2)} km</b> · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}
     <div class="muted small">${fmtD(r.date)}${r.note ? ' · ' + esc(r.note) : ''}${r.source === 'strava' ? ' · <span class="gold-t">Strava</span>' : ''}</div></div>
-    <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">👟</span>Sin carreras registradas.</div>`}`;
+    <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin carreras registradas.</div>`}`;
 };
 function afterCorrer() {
   const runs = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)); if (!runs.length) return;
   const ws = weekStart(today()), labels = [], kms = [];
   for (let w = 11; w >= 0; w--) { const s = addDays(ws, -7 * w); labels.push(fmtD(s)); kms.push(Math.round(state.runs.filter(r => r.date >= s && r.date <= addDays(s, 6)).reduce((a, r) => a + r.km, 0) * 10) / 10); }
-  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: GOLD, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#241d17' } }, y: { grid: { color: '#241d17' }, beginAtZero: true } } }) });
+  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: GOLD, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
   const last = runs.filter(r => r.min > 0 && r.km > 0).slice(-15);
-  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(r.min / r.km * 100) / 100), REDHI)] }, options: chartBase({ scales: { x: { grid: { color: '#241d17' } }, y: { reverse: true, grid: { color: '#241d17' } } } }) });
+  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(r.min / r.km * 100) / 100), REDHI)] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { reverse: true, grid: { color: '#24211c' } } } }) });
 }
 
 /* --- Ajustes --- */
@@ -593,6 +595,9 @@ V.ajustes = () => `
       : `<p class="muted small">Estás usando la app sin cuenta: tus datos viven solo en este dispositivo.</p><button class="btn-primary" data-act="goto-auth">Iniciar sesión / crear cuenta</button>`)
       : `<p class="muted small" id="syncBadge">${syncText()}. Configurá Supabase en <code>config.js</code> para activar cuentas y sincronización (ver README).</p>`}
   </div>
+  ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords y cargas máximas) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten.</p>
+    <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
+    <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label></div>` : ''}
   <div class="card"><h3>Descanso entre series</h3><label>Segundos</label><input type="number" inputmode="numeric" min="10" max="600" step="5" data-in="rest" value="${state.settings.rest}"></div>
   ${stravaReady() && state.strava.connected ? `<div class="card"><h3>Strava</h3><p class="muted small">Conectado.</p><button class="btn-danger" data-act="strava-off">Desconectar Strava</button></div>` : ''}
   <div class="card"><h3>Respaldo</h3><p class="muted small">Descargá todos tus datos o restaurá un respaldo.</p>
@@ -607,11 +612,102 @@ V.auth = () => `<div class="auth"><div class="crest">⚔</div><h1>IMPERIUM</h1><
   <div class="card gold"><form id="authform" autocomplete="on">
     <label style="margin-top:0">Email</label><input id="a_e" type="email" autocomplete="email" required>
     <label>Contraseña</label><input id="a_p" type="password" autocomplete="current-password" minlength="6" required>
+    <label>Nombre de gladiador (al crear cuenta)</label><input id="a_n" maxlength="24" autocomplete="nickname" placeholder="Cómo te verán en la Arena">
     <div class="err" id="a_err"></div>
     <button class="btn-primary btn-block" type="submit" data-act="login" style="margin-top:6px">Entrar</button>
     <button class="btn-block" type="button" data-act="signup" style="margin-top:8px">Crear cuenta</button>
   </form></div>
   <button class="btn-ghost btn-block" data-act="local-mode">Usar sin cuenta (solo este dispositivo)</button></div>`;
+
+
+/* --- Arena: comparar progreso entre cuentas independientes --- */
+function streakWeeks() {
+  const ws = weekStart(today()), td = trainingDates(); let streak = 0;
+  for (let w = 0; w < 200; w++) { const a = addDays(ws, -7 * w); const n = [...td].filter(d => d >= a && d <= addDays(a, 6)).length; if (n) streak++; else if (w > 0) break; }
+  return streak;
+}
+const profileName = () => (state.profile?.name || user?.user_metadata?.name || (user?.email || 'Gladiador').split('@')[0]).slice(0, 24);
+function buildStats() {
+  const t = today(), ws = weekStart(t), since = addDays(t, -30), x = xpInfo(), td = [...trainingDates()];
+  const weeks = [], wkm = [];
+  for (let w = 7; w >= 0; w--) {
+    const a = addDays(ws, -7 * w), b = addDays(a, 6);
+    weeks.push(td.filter(d => d >= a && d <= b).length);
+    wkm.push(Math.round(state.runs.filter(r => r.date >= a && r.date <= b).reduce((q, r) => q + r.km, 0) * 10) / 10);
+  }
+  const lifts = {};
+  for (const e of allEx()) { const b = bestWeight(e.id); if (b > 0) lifts[e.name] = b; }
+  return {
+    v: 1, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
+    sessions30: td.filter(d => d >= since).length,
+    km30: Math.round(state.runs.filter(r => r.date >= since).reduce((q, r) => q + r.km, 0) * 10) / 10,
+    goalsDone: state.goals.filter(g => goalProgress(g).pct >= 1).length,
+    weeks, wkm, lifts
+  };
+}
+async function pushProfile() {
+  if (!sb || !user) return;
+  try {
+    const { error } = await sb.from('profiles').upsert({ user_id: user.id, name: profileName(), share: state.profile?.share !== false, stats: buildStats(), updated_at: new Date().toISOString() });
+    if (error) throw error;
+  } catch (e) { console.warn('profile', e); }
+}
+V.arena = () => `<h1>Arena</h1><p class="sub">Medite tu fuerza contra la de otro gladiador. Cada uno tiene su cuenta y sus datos privados; solo se comparte un resumen.</p>
+  <div id="arena"><div class="card empty"><span class="big">···</span>Cargando la arena…</div></div>`;
+const arenaMsg = (t, btn = '') => `<div class="card empty"><span class="big">···</span>${t}${btn}</div>`;
+async function afterArena() {
+  const box = $('#arena'); if (!box) return;
+  if (!sb) { box.innerHTML = arenaMsg('Para competir hace falta activar las cuentas (ver README).'); return; }
+  if (!user) { box.innerHTML = arenaMsg('Iniciá sesión para entrar a la arena.', '<br><br><button class="btn-primary" data-act="goto-auth">Entrar</button>'); return; }
+  if (state.profile?.share === false) { box.innerHTML = arenaMsg('Para ver a otros gladiadores tenés que compartir tu progreso.', '<br><br><button data-act="goto-settings">Ir a Ajustes</button>'); return; }
+  try {
+    await pushProfile();
+    const { data, error } = await sb.from('profiles').select('user_id,name,stats,updated_at').neq('user_id', user.id).eq('share', true);
+    if (error) throw error;
+    ui.rivals = data || [];
+    if (!ui.rivals.some(r => r.user_id === ui.rivalId)) ui.rivalId = ui.rivals[0]?.user_id || null;
+    renderArena();
+  } catch (e) { console.warn(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('No se pudo cargar la arena. Revisá tu conexión.', '<br><br><button data-act="arena-refresh">Reintentar</button>'); }
+}
+function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
+  const tot = a + b, pa = tot ? a / tot * 100 : 50, pb = tot ? b / tot * 100 : 50;
+  const lead = a > b ? 'a' : b > a ? 'b' : '';
+  return `<div class="duel"><div class="duel-h"><span class="${lead === 'a' ? 'gold-t' : ''}">${fmt(a)}</span><span class="muted">${label}</span><span class="${lead === 'b' ? 'red-t' : ''}">${fmt(b)}</span></div>
+    <div class="duel-bar"><i style="width:${pa}%"></i><i class="r" style="width:${pb}%"></i></div></div>`;
+}
+function renderArena() {
+  const box = $('#arena'); if (!box || route() !== 'arena') return;
+  killCharts();
+  const me = buildStats(), rivals = ui.rivals || [], N = v => Number(v) || 0;
+  const ranking = rivals.map(r => ({ name: r.name, xp: N(r.stats?.xp), tier: r.stats?.rank || '', me: false }))
+    .concat([{ name: 'Tú', xp: me.xp, tier: me.rank, me: true }]).sort((a, b) => b.xp - a.xp);
+  const rankCard = `<h2>Clasificación</h2><div class="card">${ranking.map((r, i) => `<div class="list-item rank-row"><span class="pos">${i + 1}</span>
+    <div class="grow"><b class="${r.me ? 'gold-t' : ''}">${esc(r.name)}</b><div class="muted small">${esc(r.tier)}</div></div><span class="tag ${r.me ? 'gold' : ''}">${r.xp} xp</span></div>`).join('')}</div>`;
+  if (!rivals.length) { box.innerHTML = arenaMsg('Todavía no hay otros gladiadores.<br>Pedile a tu rival que cree su cuenta y active “Compartir mi progreso”.', '<br><br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
+  const rv = rivals.find(r => r.user_id === ui.rivalId) || rivals[0], s = rv.stats || {};
+  const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)],
+    ['Récords', me.prs, N(s.prs)], ['Semanas seguidas', me.streak, N(s.streak)], ['Campañas cumplidas', me.goalsDone, N(s.goalsDone)]];
+  const wa = rows.filter(r => r[1] > r[2]).length, wb = rows.filter(r => r[2] > r[1]).length;
+  const lifts = Object.keys(me.lifts).filter(n => s.lifts && s.lifts[n]).sort((a, b) => (me.lifts[b] + s.lifts[b]) - (me.lifts[a] + s.lifts[a])).slice(0, 10);
+  const chips = rivals.length > 1 ? `<div class="chips" style="margin-bottom:14px">${rivals.map(r => `<button class="chip ${r.user_id === rv.user_id ? 'on' : ''}" data-act="arena-rival" data-id="${r.user_id}">${esc(r.name)}</button>`).join('')}</div>` : '';
+  box.innerHTML = `${chips}
+  <div class="card gold"><div class="vs"><b class="gold-t">Tú</b><span class="x">VS</span><b class="red-t">${esc(rv.name)}</b></div>
+    <div class="score" style="margin-top:14px">${wa} — ${wb}<small>Marcador del duelo</small></div></div>
+  <div class="card">${rows.map(r => duelRow(...r)).join('')}</div>
+  <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><p class="muted small" style="margin:0">Kilómetros por semana</p><div class="chart-box"><canvas id="ch2"></canvas></div></div>
+  <h2>Cargas máximas</h2>
+  <div class="card">${lifts.length ? `<div class="lift head"><span>Ejercicio</span><span class="v">Tú</span><span class="v">${esc(rv.name).slice(0, 8)}</span></div>` + lifts.map(n => `<div class="lift"><span>${esc(n)}</span>
+    <span class="v ${me.lifts[n] > s.lifts[n] ? 'win' : ''}">${fmtN(me.lifts[n])}</span><span class="v ${s.lifts[n] > me.lifts[n] ? 'win' : ''}">${fmtN(s.lifts[n])}</span></div>`).join('')
+    : '<p class="muted small center" style="margin:0">Todavía no comparten ejercicios en común.</p>'}</div>
+  ${rankCard}
+  <p class="muted small center">Actualizado ${rv.updated_at ? new Date(rv.updated_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '–'} · <a href="#" class="gold-t" data-act="arena-refresh">Actualizar</a></p>`;
+  const labels = Array.from({ length: 8 }, (_, i) => fmtD(addDays(weekStart(today()), -7 * (7 - i))));
+  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#24211c' }, beginAtZero: true, ticks: { precision: 0 } } } });
+  const ds = (a, b) => [{ label: 'Tú', data: a, backgroundColor: GOLD, borderRadius: 3 }, { label: rv.name, data: Array.isArray(b) ? b : [], backgroundColor: REDHI, borderRadius: 3 }];
+  drawChart('ch1', { type: 'bar', data: { labels, datasets: ds(me.weeks, s.weeks) }, options: opt });
+  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
+}
 
 /* ---------- Render / ruteo ---------- */
 function route() { return (location.hash.replace(/^#\/?/, '') || 'foro').split('?')[0]; }
@@ -627,10 +723,12 @@ function render(keepScroll = false) {
   if (authMode) { view.innerHTML = V.auth(); return; }
   const name = V[r] && !r.startsWith('prog_') ? r : 'foro';
   view.innerHTML = V[name]();
-  $('#tabs').innerHTML = TABS.map(([k, ic, n]) => `<a href="#/${k}" class="${k === name ? 'on' : ''}"><span class="ic">${ic}</span>${n}</a>`).join('');
-  const x = xpInfo(); $('#rankChip').textContent = `${x.rank.icon} ${x.rank.name}`;
+  Motion.setNav(name, TABS); Motion.enter(view, !keepScroll);
+  if (!keepScroll && ui.lastRoute !== name) { Motion.sweep(); ui.lastRoute = name; }
+  const x = xpInfo(); $('#rankChip').textContent = `${x.roman} · ${x.rank.name}`;
   if (name === 'progreso') afterProgreso();
   if (name === 'correr') afterCorrer();
+  if (name === 'arena') afterArena();
   window.scrollTo(0, keepScroll ? y : 0);
 }
 
@@ -678,7 +776,7 @@ async function finishSession() {
   state.active = null; stopRest(); save();
   location.hash = '#/progreso'; ui.progTab = 'fuerza'; if (entries[0]) ui.exId = entries[0].exId;
   render();
-  toast(prs.length ? `🏆 ¡Nuevo récord en ${prs.map(exName).join(', ')}!` : '⚔ Entrenamiento registrado. ¡Ave!', 4000);
+  toast(prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. ¡Ave!', 4000);
 }
 
 const ACTIONS = {
@@ -705,8 +803,9 @@ const ACTIONS = {
   'live-done': el => {
     const s = state.active.entries[+el.dataset.e].sets[+el.dataset.s];
     if (!s.done && (s.w == null || s.r == null)) return toast('Completá kg y reps antes de marcar la serie');
+    const { e: ei, s: si } = el.dataset;
     s.done = !s.done; save(); render(true);
-    if (s.done) startRest(state.settings.rest || 90);
+    if (s.done) { startRest(state.settings.rest || 90); Motion.pop(document.querySelector(`[data-act=live-done][data-e="${ei}"][data-s="${si}"]`)); }
   },
   'live-addset': el => { const e = state.active.entries[+el.dataset.e]; const l = e.sets[e.sets.length - 1]; e.sets.push({ w: l?.w ?? null, r: l?.r ?? null, done: false }); save(); render(true); },
   'live-delset': el => { const e = state.active.entries[+el.dataset.e]; if (e.sets.length > 1) { e.sets.pop(); save(); render(true); } },
@@ -793,6 +892,9 @@ const ACTIONS = {
     const owner = state.owner; state = emptyState(); state.owner = owner; save();
     toast('Datos borrados'); render();
   },
+  'arena-rival': el => { ui.rivalId = el.dataset.id; renderArena(); },
+  'arena-refresh': (el, ev) => { ev?.preventDefault(); afterArena(); },
+  'goto-settings': () => { location.hash = '#/ajustes'; },
   login: () => authSubmit(false), signup: () => authSubmit(true)
 };
 function moveItem(id, dir) {
@@ -805,7 +907,9 @@ async function authSubmit(isSignup) {
   if (!e || !p || p.length < 6) { err.textContent = 'Ingresá un email válido y una contraseña de al menos 6 caracteres.'; return; }
   err.textContent = 'Un momento…';
   try {
-    const { data, error } = isSignup ? await sb.auth.signUp({ email: e, password: p }) : await sb.auth.signInWithPassword({ email: e, password: p });
+    const nm = (val('a_n') || '').trim().slice(0, 24);
+    if (isSignup && nm) state.profile = { ...state.profile, name: nm };
+    const { data, error } = isSignup ? await sb.auth.signUp({ email: e, password: p, options: { data: { name: nm } } }) : await sb.auth.signInWithPassword({ email: e, password: p });
     if (error) throw error;
     if (!data.session) { err.style.color = 'var(--gold-hi)'; err.textContent = 'Cuenta creada. Revisá tu email para confirmarla y luego iniciá sesión.'; return; }
     user = data.session.user; localStorage.removeItem(LS_LOCAL);
@@ -829,12 +933,14 @@ document.addEventListener('input', ev => {
   } else if (k === 'rt') {
     const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id); if (it) { it[el.dataset.f] = num(el.value); save(); }
   } else if (k === 'rname') { ensureDay(ui.routineDay).name = el.value.slice(0, 40); save(); }
+  else if (k === 'pname') { state.profile = { ...state.profile, name: el.value.slice(0, 24) }; save(); }
   else if (k === 'rest') { const v = num(el.value); if (v >= 10 && v <= 600) { state.settings.rest = Math.round(v); save(); } }
   else if (k === 'pickq') { ui.pick.q = el.value; renderPickList(); }
 });
 document.addEventListener('change', ev => {
   const el = ev.target, k = el.dataset?.in; if (!k) return;
-  if (k === 'startday') { ui.startDay = +el.value; render(true); }
+  if (k === 'pshare') { state.profile = { ...state.profile, share: el.checked }; save(); toast(el.checked ? 'Tu progreso es visible en la Arena' : 'Tu progreso ya no es visible'); }
+  else if (k === 'startday') { ui.startDay = +el.value; render(true); }
   else if (k === 'progex') { ui.exId = el.value; render(true); }
   else if (k === 'gmeasure') { const l = latestBody(el.value); const b = $('#g_b', $('#modal')); if (b) b.value = l ? l.value : ''; }
   else if (k === 'gmode') {
@@ -864,7 +970,8 @@ async function boot() {
     navigator.serviceWorker.register('sw.js').catch(() => { });
   }
   loadState();
-  if (window.Chart) { Chart.defaults.color = '#9a8e78'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
+  Motion.buildNav(TABS);
+  if (window.Chart) { Chart.defaults.color = '#8a8478'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
   if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase) {
     sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
     try { const { data } = await sb.auth.getSession(); user = data.session?.user || null; } catch { user = null; }

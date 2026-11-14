@@ -18,6 +18,27 @@ create policy "user_data: actualizar lo propio" on public.user_data
 create policy "user_data: borrar lo propio" on public.user_data
   for delete using (auth.uid() = user_id);
 
+-- Perfil público (Arena): solo un RESUMEN que el propio usuario publica.
+-- Rutinas, peso corporal, medidas y notas viven en user_data y son privados.
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  name text not null check (char_length(name) between 1 and 24),
+  share boolean not null default true,
+  stats jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+alter table public.profiles enable row level security;
+
+-- Cualquier usuario con sesión puede ver los perfiles que decidieron compartir (y el suyo).
+create policy "profiles: ver compartidos o propio" on public.profiles
+  for select to authenticated using (share = true or auth.uid() = user_id);
+create policy "profiles: crear el propio" on public.profiles
+  for insert to authenticated with check (auth.uid() = user_id);
+create policy "profiles: editar el propio" on public.profiles
+  for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
+create policy "profiles: borrar el propio" on public.profiles
+  for delete to authenticated using (auth.uid() = user_id);
+
 -- Tokens de Strava: SIN políticas = ningún cliente puede leerlos.
 -- Solo la Edge Function (con service_role) accede.
 create table if not exists public.strava_tokens (

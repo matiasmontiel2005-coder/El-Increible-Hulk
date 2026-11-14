@@ -1,5 +1,5 @@
-const VERSION = 'imperium-v1';
-const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'config.js', 'manifest.webmanifest',
+const VERSION = 'imperium-v2';
+const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {

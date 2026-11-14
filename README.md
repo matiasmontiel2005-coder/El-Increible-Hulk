@@ -8,6 +8,7 @@ App web instalable (PWA) de entrenamiento con estética de imperio romano: rutin
 - **Progreso**: peso máximo y 1RM estimado por ejercicio, volumen, medidas corporales, constancia semanal.
 - **Correr**: carreras manuales o importadas desde Strava; km por semana y ritmo.
 - **Metas**: fuerza, cuerpo, running y constancia, con barra de progreso y estado (en ritmo / atrasada / cumplida).
+- **Arena**: cada persona tiene su propia cuenta y sus datos privados; la Arena muestra un duelo cara a cara (gloria, sesiones, km, récords, constancia, campañas), gráficos semanales, cargas máximas en común y una clasificación.
 - **Rangos**: Recluta → Legionario → Optio → Centurión → Tribuno → Legado → Emperador, según tu gloria acumulada.
 - **Nube** (opcional): cuenta y sincronización con Supabase. Sin configurarla, la app funciona 100 % local.
 
@@ -27,6 +28,12 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 3. **Authentication → Sign In / Providers → Email**. Si no querés confirmar por email, desactivá "Confirm email".
 4. **Authentication → URL Configuration**: poné la URL de tu GitHub Pages como *Site URL*.
 5. **Project Settings → API**: copiá la *Project URL* y la clave **anon** en `config.js`. **Nunca uses la `service_role` en `config.js`.**
+
+## Varios usuarios y la Arena
+- Cada usuario crea **su propia cuenta** (email + contraseña) y tiene datos completamente separados (protegidos por Row Level Security).
+- Lo único compartido es un **resumen** que cada uno publica en la tabla `profiles`: nombre, rango, gloria, sesiones y km de 30 días, récords, constancia, campañas cumplidas, entrenos/km de las últimas 8 semanas y la carga máxima por ejercicio. **Nunca** se comparte peso corporal, medidas, rutina ni notas.
+- Cada uno puede dejar de compartir desde **Ajustes → Arena** (y deja de ver a los demás).
+- Para que solo entren ustedes dos: cuando ambos hayan creado su cuenta, en Supabase desactivá **Authentication → Sign In / Providers → "Allow new users to sign up"**. Así nadie más puede registrarse ni aparecer en la Arena.
 
 ## Carreras automáticas: Adidas Running → Strava → Imperium
 Adidas Running no tiene API pública, así que el puente es Strava.
