@@ -295,11 +295,12 @@ function chartBase(extra = {}) {
   return Object.assign({
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
-    scales: { x: { grid: { color: '#24211c' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#24211c' }, beginAtZero: false } }
+    scales: { x: { grid: { color: '#2e2e2e' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: false } }
   }, extra);
 }
-const GOLD = '#c8a45a', GOLDHI = '#e6cf94', RED = '#8e2b2b', REDHI = '#c24a4a';
-function lineDs(label, data, color = GOLD, fill = true) {
+// Paleta de los gráficos (la misma de la interfaz)
+const ORANGE = '#FF5C22', RUST = '#A74B2E', LGRAY = '#D3D3D3';
+function lineDs(label, data, color = ORANGE, fill = true) {
   return { label, data, borderColor: color, backgroundColor: color + '33', pointBackgroundColor: color, tension: .25, fill, pointRadius: 3, borderWidth: 2 };
 }
 
@@ -574,8 +575,8 @@ function afterProgreso() {
   if (ui.progTab === 'fuerza' && ui.exId) {
     const h = exHistory(ui.exId); if (!h.length) return;
     const labels = h.map(x => fmtD(x.date));
-    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), GOLD), lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), REDHI, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } } }) });
-    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RED, borderColor: GOLD, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
+    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } } }) });
+    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RUST, borderColor: ORANGE, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
   } else if (ui.progTab === 'cuerpo') {
     const list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date));
     if (list.length) drawChart('ch1', { type: 'line', data: { labels: list.map(b => fmtD(b.date)), datasets: [lineDs(MEASURES[ui.bodyType].name, list.map(b => b.value))] }, options: chartBase() });
@@ -587,9 +588,9 @@ function afterProgreso() {
       gym.push(ss.length); run.push(state.runs.filter(x => x.date >= s && x.date <= e).length);
       vol.push(Math.round(ss.reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((c, y) => c + (y.w || 0) * (y.r || 0), 0), 0), 0)));
     }
-    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: '#24211c' } }, y: { stacked: true, grid: { color: '#24211c' }, ticks: { precision: 0 }, beginAtZero: true } } });
-    drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ label: 'Gimnasio', data: gym, backgroundColor: RED, borderRadius: 4 }, { label: 'Running', data: run, backgroundColor: GOLD, borderRadius: 4 }] }, options: opt });
-    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
+    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: '#2e2e2e' } }, y: { stacked: true, grid: { color: '#2e2e2e' }, ticks: { precision: 0 }, beginAtZero: true } } });
+    drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ label: 'Gimnasio', data: gym, backgroundColor: RUST, borderRadius: 4 }, { label: 'Running', data: run, backgroundColor: ORANGE, borderRadius: 4 }] }, options: opt });
+    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
   }
 }
 
@@ -639,9 +640,9 @@ function afterCorrer() {
   const runs = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)); if (!runs.length) return;
   const ws = weekStart(today()), labels = [], kms = [];
   for (let w = 11; w >= 0; w--) { const s = addDays(ws, -7 * w); labels.push(fmtD(s)); kms.push(Math.round(state.runs.filter(r => r.date >= s && r.date <= addDays(s, 6)).reduce((a, r) => a + r.km, 0) * 10) / 10); }
-  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: GOLD, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
+  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
   const last = runs.filter(r => runPace(r) > 0).slice(-15);
-  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), REDHI)] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { reverse: true, grid: { color: '#24211c' } } } }) });
+  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), LGRAY)] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { reverse: true, grid: { color: '#2e2e2e' } } } }) });
 }
 
 /* --- Ajustes --- */
@@ -740,7 +741,7 @@ function rrunsHtml(rv) {
 function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
   const tot = a + b, pa = tot ? a / tot * 100 : 50, pb = tot ? b / tot * 100 : 50;
   const lead = a > b ? 'a' : b > a ? 'b' : '';
-  return `<div class="duel"><div class="duel-h"><span class="${lead === 'a' ? 'gold-t' : ''}">${fmt(a)}</span><span class="muted">${label}</span><span class="${lead === 'b' ? 'red-t' : ''}">${fmt(b)}</span></div>
+  return `<div class="duel"><div class="duel-h"><span class="${lead === 'a' ? 'gold-t' : ''}">${fmt(a)}</span><span class="muted">${label}</span><span class="${lead === 'b' ? 'rival-t' : ''}">${fmt(b)}</span></div>
     <div class="duel-bar"><i style="width:${pa}%"></i><i class="r" style="width:${pb}%"></i></div></div>`;
 }
 function renderArena() {
@@ -759,7 +760,7 @@ function renderArena() {
   const lifts = Object.keys(me.lifts).filter(n => s.lifts && s.lifts[n]).sort((a, b) => (me.lifts[b] + s.lifts[b]) - (me.lifts[a] + s.lifts[a])).slice(0, 10);
   const chips = rivals.length > 1 ? `<div class="chips" style="margin-bottom:14px">${rivals.map(r => `<button class="chip ${r.user_id === rv.user_id ? 'on' : ''}" data-act="arena-rival" data-id="${r.user_id}">${esc(r.name)}</button>`).join('')}</div>` : '';
   box.innerHTML = `${chips}
-  <div class="card gold"><div class="vs"><b class="gold-t">Tú</b><span class="x">VS</span><b class="red-t">${esc(rv.name)}</b></div>
+  <div class="card gold"><div class="vs"><b class="gold-t">Tú</b><span class="x">VS</span><b class="rival-t">${esc(rv.name)}</b></div>
     <div class="score" style="margin-top:14px">${wa} — ${wb}<small>Marcador del duelo</small></div></div>
   <div class="card">${rows.map(r => duelRow(...r)).join('')}</div>
   <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
@@ -772,10 +773,10 @@ function renderArena() {
   ${rankCard}
   <p class="muted small center">Actualizado ${rv.updated_at ? new Date(rv.updated_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '–'} · <a href="#" class="gold-t" data-act="arena-refresh">Actualizar</a></p>`;
   const labels = Array.from({ length: 8 }, (_, i) => fmtD(addDays(weekStart(today()), -7 * (7 - i))));
-  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#24211c' }, beginAtZero: true, ticks: { precision: 0 } } } });
-  const ds = (a, b) => [{ label: 'Tú', data: a, backgroundColor: GOLD, borderRadius: 3 }, { label: rv.name, data: Array.isArray(b) ? b : [], backgroundColor: REDHI, borderRadius: 3 }];
+  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true, ticks: { precision: 0 } } } });
+  const ds = (a, b) => [{ label: 'Tú', data: a, backgroundColor: ORANGE, borderRadius: 3 }, { label: rv.name, data: Array.isArray(b) ? b : [], backgroundColor: LGRAY, borderRadius: 3 }];
   drawChart('ch1', { type: 'bar', data: { labels, datasets: ds(me.weeks, s.weeks) }, options: opt });
-  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#24211c' }, beginAtZero: true } } }) });
+  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
 }
 
 /* ---------- Render / ruteo ---------- */
@@ -991,7 +992,7 @@ async function authSubmit(isSignup) {
     const { data, error } = isSignup ? await sb.auth.signUp({ email: e, password: p, options: { data: { name: nm } } }) : await sb.auth.signInWithPassword({ email: e, password: p });
     if (error) throw error;
     authFails = 0; try { localStorage.removeItem(AUTH_LOCK); } catch { /* nada */ }
-    if (!data.session) { err.style.color = 'var(--gold-hi)'; err.textContent = 'Cuenta creada. Revisá tu email para confirmarla y luego iniciá sesión.'; return; }
+    if (!data.session) { err.style.color = 'var(--accent)'; err.textContent = 'Cuenta creada. Revisá tu email para confirmarla y luego iniciá sesión.'; return; }
     user = data.session.user; localStorage.removeItem(LS_LOCAL);
     await initialSync(); location.hash = '#/foro'; render();
   } catch (ex) {
@@ -1066,7 +1067,7 @@ async function boot() {
   }
   loadState();
   Motion.buildNav(TABS);
-  if (window.Chart) { Chart.defaults.color = '#8a8478'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
+  if (window.Chart) { Chart.defaults.color = '#A1A1A1'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
   if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase) {
     sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
     try { const { data } = await sb.auth.getSession(); user = data.session?.user || null; } catch { user = null; }
