@@ -1,6 +1,6 @@
-const VERSION = 'imperium-v5';
+const VERSION = 'imperium-v6';
 const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
-  'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
+  'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/favicon-48.png', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
   // cache: 'reload' = ignora la memoria HTTP del navegador (GitHub Pages permite guardarla 10 min).

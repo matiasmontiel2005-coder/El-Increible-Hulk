@@ -568,7 +568,7 @@ V.ajustes = () => `
   <p class="muted small center" style="margin-top:20px">Imperium Gladiador · v1</p>`;
 
 /* --- Auth --- */
-V.auth = () => `<div class="auth"><div class="crest">⚔</div><h1>IMPERIUM</h1><p class="sub">Entrá al Coliseo. Tu legión te espera.</p>
+V.auth = () => `<div class="auth"><img class="crest-img" src="icons/icon-192.png" alt="Imperium" width="88" height="88"><h1>IMPERIUM</h1><p class="sub">Entrá al Coliseo. Tu legión te espera.</p>
   <div class="card gold"><form id="authform" autocomplete="on">
     <label style="margin-top:0">Email</label><input id="a_e" type="email" autocomplete="email" required>
     <label>Contraseña</label><input id="a_p" type="password" autocomplete="current-password" minlength="6" required>
