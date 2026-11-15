@@ -204,6 +204,18 @@ body.sheet-open main { transform: scale(.955); filter: brightness(.55) blur(1.5p
 .auth form { text-align: left; }
 .err { color: var(--red-hi); font-size: 13px; min-height: 18px; margin-top: 10px; }
 
+/* Mapa de recorrido */
+.map { background-color: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 140px;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px); background-size: 34px 34px; background-position: center; }
+svg.route { width: 100%; height: auto; display: block; }
+svg.route .line { fill: none; stroke: var(--gold); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 1; }
+svg.route .rs { fill: var(--gold-hi); } svg.route .re { fill: var(--red-hi); }
+svg.route.thumb .line { stroke-width: 2.5; }
+.thumbbtn { flex: none; width: 56px; height: 56px; padding: 0; border-radius: var(--radius); background: var(--bg); display: block; }
+.thumbbtn svg { width: 100%; height: 100%; }
+.tokenbox { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 1.5; word-break: break-all; background: var(--bg); border: 1px solid var(--gold); border-radius: var(--radius); padding: 14px; color: var(--gold-hi); user-select: all; -webkit-user-select: all; }
+input[readonly] { color: var(--muted); font-size: 13px; }
+
 /* ===== Movimiento ===== */
 @keyframes rise { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
 
@@ -222,6 +234,8 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .ripple { position: absolute; border-radius: 50%; background: rgba(230,207,148,.26); transform: scale(0); opacity: 1; pointer-events: none; animation: ripple .7s var(--out) forwards; }
 @keyframes ripple { to { transform: scale(1); opacity: 0; } }
 
+#modal .sheet svg.route .line, #view.anim svg.route:not(.thumb) .line { animation: draw 1.8s .25s var(--out) both; }
+@keyframes draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
 #view.anim .bar > i { animation: fill 1.2s .25s var(--out) both; }
 #view.anim .duel-bar i { animation: fill 1s .3s var(--out) both; }
 #view.anim .hero .laurel { animation: numeral 1.1s .1s var(--out) both; }

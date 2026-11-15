@@ -1,4 +1,4 @@
-const VERSION = 'imperium-v2';
+const VERSION = 'imperium-v3';
 const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
@@ -13,8 +13,8 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Datos en vivo (Supabase / Strava): siempre red, nunca caché.
-  if (url.hostname.endsWith('supabase.co') || url.hostname.endsWith('strava.com')) return;
+  // Datos en vivo (Supabase): siempre red, nunca caché.
+  if (url.hostname.endsWith('supabase.co')) return;
   const sameOrigin = url.origin === location.origin;
   const isFont = url.hostname.includes('fonts.g');
   if (!sameOrigin && !isFont) return;

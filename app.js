@@ -67,7 +67,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
   exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true },
-  active: null, settings: { rest: 90 }, strava: { connected: false, lastSync: 0 }
+  active: null, settings: { rest: 90, hasToken: false }
 });
 let state = emptyState();
 const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', exId: null, bodyType: 'peso', startDay: null };
@@ -250,58 +250,148 @@ async function initialSync() {
   syncing = false;
 }
 
-/* ---------- Strava ---------- */
-const stravaReady = () => !!(sb && user && CFG.STRAVA_CLIENT_ID);
-function stravaConnect() {
-  if (!stravaReady()) return toast('Falta configurar Strava (ver README)');
-  const redirect = location.origin + location.pathname;
-  location.href = 'https://www.strava.com/oauth/authorize?' + new URLSearchParams({
-    client_id: CFG.STRAVA_CLIENT_ID, response_type: 'code', redirect_uri: redirect,
-    approval_prompt: 'auto', scope: 'read,activity:read_all', state: 'strava'
-  });
+/* ---------- Recorrido (GPS), bandeja de carreras y token ---------- */
+const INGEST_URL = () => (CFG.SUPABASE_URL || '').replace(/\/$/, '') + '/functions/v1/ingest-run';
+function hav(a, b, c, d) {
+  const R = 6371000, r = Math.PI / 180, dLa = (c - a) * r, dLo = (d - b) * r;
+  const x = Math.sin(dLa / 2) ** 2 + Math.cos(a * r) * Math.cos(c * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
 }
-async function handleStravaCallback() {
-  const q = new URLSearchParams(location.search);
-  if (q.get('state') !== 'strava' || !q.get('code')) return;
-  const code = q.get('code'), denied = q.get('error');
-  history.replaceState({}, '', location.pathname + '#/correr');
-  if (denied || !sb || !user) return toast('No se pudo conectar Strava');
-  const scope = q.get('scope') || '';
-  if (!scope.includes('activity:read')) return toast('Strava necesita permiso para leer tus actividades');
-  try {
-    const { error } = await sb.functions.invoke('strava', { body: { action: 'exchange', code } });
-    if (error) throw error;
-    state.strava = { connected: true, lastSync: 0 }; save();
-    toast('Strava conectado. Importando carreras…');
-    await syncStrava(true);
-  } catch (e) { console.warn(e); toast('Error al conectar Strava'); }
+// Polilínea comprimida (formato de Google): un recorrido de 400 puntos ocupa ~1,5 KB.
+function encNum(v) { v = v < 0 ? ~(v << 1) : v << 1; let o = ''; while (v >= 0x20) { o += String.fromCharCode((0x20 | (v & 0x1f)) + 63); v >>= 5; } return o + String.fromCharCode(v + 63); }
+function encodePoly(pts) { let o = '', pa = 0, po = 0; for (const [la, lo] of pts) { const a = Math.round(la * 1e5), b = Math.round(lo * 1e5); o += encNum(a - pa) + encNum(b - po); pa = a; po = b; } return o; }
+function decodePoly(str) {
+  const out = []; let i = 0, la = 0, lo = 0;
+  while (i < str.length) {
+    let r = 0, sh = 0, b;
+    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20 && i < str.length);
+    la += (r & 1) ? ~(r >> 1) : (r >> 1);
+    r = 0; sh = 0;
+    do { b = str.charCodeAt(i++) - 63; r |= (b & 0x1f) << sh; sh += 5; } while (b >= 0x20 && i < str.length);
+    lo += (r & 1) ? ~(r >> 1) : (r >> 1);
+    out.push([la / 1e5, lo / 1e5]);
+  }
+  return out;
 }
-async function syncStrava(quiet = false) {
-  if (!stravaReady() || !state.strava.connected) return;
+function thin(pts, max = 400) {
+  if (pts.length <= max) return pts;
+  return Array.from({ length: max }, (_, i) => pts[Math.round(i * (pts.length - 1) / (max - 1))]);
+}
+// Dibuja el recorrido como línea sobre una cuadrícula (sin mapas externos: funciona offline y no filtra tu ubicación).
+function routeSvg(poly, { w = 340, h = 280, pad = 22, thumb = false } = {}) {
+  const pts = poly ? decodePoly(poly) : []; if (pts.length < 2) return '';
+  const lat0 = pts.reduce((a, p) => a + p[0], 0) / pts.length, k = Math.cos(lat0 * Math.PI / 180);
+  const xy = pts.map(([la, lo]) => [lo * k, -la]);
+  const xs = xy.map(p => p[0]), ys = xy.map(p => p[1]);
+  const minx = Math.min(...xs), maxx = Math.max(...xs), miny = Math.min(...ys), maxy = Math.max(...ys);
+  const sc = Math.min((w - 2 * pad) / ((maxx - minx) || 1e-9), (h - 2 * pad) / ((maxy - miny) || 1e-9));
+  const ox = (w - (maxx - minx) * sc) / 2 - minx * sc, oy = (h - (maxy - miny) * sc) / 2 - miny * sc;
+  const P = xy.map(([x, y]) => [x * sc + ox, y * sc + oy]);
+  const d = P.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join('');
+  const st = P[0], en = P[P.length - 1], r = thumb ? 2.5 : 5;
+  return `<svg class="route${thumb ? ' thumb' : ''}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Recorrido"><path class="line" pathLength="1" d="${d}"/>
+    <circle class="rs" cx="${st[0].toFixed(1)}" cy="${st[1].toFixed(1)}" r="${r}"/><circle class="re" cx="${en[0].toFixed(1)}" cy="${en[1].toFixed(1)}" r="${r}"/></svg>`;
+}
+
+// --- Bandeja: carreras que el celular envió a la nube mientras la app estaba cerrada ---
+async function pullInbox(quiet = true) {
+  if (!sb || !user) return 0;
   try {
-    const after = state.strava.lastSync ? Math.max(0, state.strava.lastSync - 86400 * 2) : 0;
-    const { data, error } = await sb.functions.invoke('strava', { body: { action: 'sync', after } });
+    const { data, error } = await sb.from('incoming_runs').select('id,ext_id,data');
     if (error) throw error;
-    if (data?.disconnected) { state.strava.connected = false; save(); return toast('Strava se desconectó. Volvé a conectarlo.'); }
-    let added = 0;
-    for (const a of data?.activities || []) {
-      if (!/run/i.test(a.sport_type || a.type || '')) continue;
-      if (state.runs.some(r => r.stravaId === a.id)) continue;
-      state.runs.push({
-        id: uid(), stravaId: a.id, date: String(a.start_date_local).slice(0, 10),
-        km: Math.round(a.distance / 10) / 100, min: Math.round(a.moving_time / 6) / 10,
-        note: a.name || '', source: 'strava', elev: Math.round(a.total_elevation_gain || 0)
-      });
-      added++;
+    if (!data?.length) { if (!quiet) toast('No hay carreras nuevas'); return 0; }
+    let n = 0;
+    for (const row of data) {
+      const d = row.data || {};
+      if (state.runs.some(r => r.extId === row.ext_id)) continue;
+      state.runs.push({ id: uid(), extId: row.ext_id, date: String(d.date).slice(0, 10), km: d.km, min: d.min, note: d.note || '', source: 'bridge',
+        poly: Array.isArray(d.route) && d.route.length > 1 ? encodePoly(thin(d.route)) : undefined });
+      n++;
     }
-    state.strava.lastSync = Math.floor(Date.now() / 1000); save();
-    if (!quiet || added) toast(added ? `${added} carrera(s) nuevas desde Strava` : 'Strava al día');
-    if (added) render();
-  } catch (e) { console.warn(e); if (!quiet) toast('No se pudo sincronizar con Strava'); }
+    if (n) save();
+    const { error: de } = await sb.from('incoming_runs').delete().in('id', data.map(r => r.id)); // ya guardadas: se vacía la bandeja
+    if (de) console.warn('inbox delete', de);
+    if (n) { toast(`${n} carrera${n === 1 ? '' : 's'} nueva${n === 1 ? '' : 's'} de Adidas Running`); render(true); }
+    else if (!quiet) toast('No hay carreras nuevas');
+    return n;
+  } catch (e) { console.warn('inbox', e); if (!quiet) toast('No se pudo revisar la bandeja'); return 0; }
 }
-async function stravaDisconnect() {
-  try { await sb.functions.invoke('strava', { body: { action: 'disconnect' } }); } catch { /* ignorar */ }
-  state.strava.connected = false; save(); toast('Strava desconectado'); render();
+async function sha256(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+async function newToken() {
+  const raw = crypto.getRandomValues(new Uint8Array(24));
+  const token = 'imp_' + [...raw].map(b => b.toString(16).padStart(2, '0')).join('');
+  const { error } = await sb.from('ingest_tokens').upsert({ user_id: user.id, token_hash: await sha256(token) });
+  if (error) throw error;
+  state.settings.hasToken = true; save();
+  return token;
+}
+
+// --- Rastreador GPS dentro de la app (el recorrido queda guardado con la carrera) ---
+const TRK_KEY = 'imperium.track';
+let trk = null, trkTimer = null, wake = null, trkMapAt = 0;
+function trkLoad() {
+  try {
+    const d = JSON.parse(localStorage.getItem(TRK_KEY) || 'null');
+    if (d && Array.isArray(d.pts)) trk = { pts: d.pts, dist: d.dist || 0, t0: d.t0, pausedMs: d.pausedMs || 0, paused: true, pausedAt: d.savedAt || Date.now(), watch: null, acc: null };
+  } catch { /* borrador ilegible */ }
+}
+function trkSave() {
+  if (!trk) return;
+  try { localStorage.setItem(TRK_KEY, JSON.stringify({ pts: trk.pts, dist: trk.dist, t0: trk.t0, pausedMs: trk.pausedMs, savedAt: Date.now() })); } catch { /* sin espacio */ }
+}
+const trkElapsed = () => trk ? ((trk.paused ? trk.pausedAt : Date.now()) - trk.t0 - trk.pausedMs) / 60000 : 0;
+async function trkWake() { try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch { /* sin wake lock */ } }
+function trkRelease() { try { wake?.release(); } catch { /* nada */ } wake = null; }
+function trkPos(p) {
+  if (!trk || trk.paused) return;
+  const { latitude: la, longitude: lo, accuracy: ac } = p.coords; trk.acc = ac;
+  if (ac > 35) return; // señal imprecisa: se descarta
+  const last = trk.pts[trk.pts.length - 1];
+  if (last) {
+    const d = hav(last[0], last[1], la, lo), dt = (p.timestamp - last[2]) / 1000;
+    if (d < 4) return;                       // quieto / ruido del GPS
+    if (dt > 0 && d / dt > 11) return;       // salto imposible (>40 km/h)
+    trk.dist += d;
+  }
+  trk.pts.push([la, lo, p.timestamp]);
+  if (trk.pts.length % 8 === 0) trkSave();
+}
+function trkErr(e) {
+  if (e.code === 1) { trkPause(); toast('Falta el permiso de ubicación: activalo en los ajustes del navegador'); }
+  else if (trk) trk.acc = null;
+}
+function trkStart() {
+  if (!navigator.geolocation) return toast('Este dispositivo no permite usar el GPS');
+  if (!trk) trk = { pts: [], dist: 0, t0: Date.now(), pausedMs: 0, paused: false, pausedAt: 0, watch: null, acc: null };
+  if (trk.paused && trk.pausedAt) { trk.pausedMs += Date.now() - trk.pausedAt; trk.pausedAt = 0; }
+  trk.paused = false;
+  if (trk.watch == null) trk.watch = navigator.geolocation.watchPosition(trkPos, trkErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+  trkWake(); clearInterval(trkTimer); trkTimer = setInterval(trkTick, 1000); trkSave(); trkTick();
+}
+function trkHalt() { if (trk?.watch != null) navigator.geolocation.clearWatch(trk.watch); if (trk) trk.watch = null; clearInterval(trkTimer); trkTimer = null; trkRelease(); }
+function trkPause() { if (!trk || trk.paused) return; trk.paused = true; trk.pausedAt = Date.now(); trkHalt(); trkSave(); if (route() === 'rastrear') render(true); }
+function trkTick() {
+  if (!trk) return;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  const min = trkElapsed(), km = trk.dist / 1000;
+  set('trk-dist', fmtN(km, 2)); set('trk-time', fmtTime(min)); set('trk-pace', km > 0.05 ? fmtPace(min, km) : '–');
+  set('trk-acc', trk.paused ? 'En pausa' : trk.acc == null ? 'Buscando señal de GPS…' : `Precisión del GPS: ${Math.round(trk.acc)} m${trk.acc > 35 ? ' (débil: se ignoran estos puntos)' : ''}`);
+  const map = document.getElementById('trk-map');
+  if (map && trk.pts.length > 1 && Date.now() - trkMapAt > 4000) { trkMapAt = Date.now(); map.innerHTML = routeSvg(encodePoly(thin(trk.pts.map(q => [q[0], q[1]]))), { thumb: false }); }
+}
+function trkDiscard() { trkHalt(); trk = null; try { localStorage.removeItem(TRK_KEY); } catch { /* nada */ } }
+function trkFinish() {
+  if (!trk) return;
+  const km = trk.dist / 1000, min = trkElapsed();
+  if (km < 0.1) {
+    if (!confirm('El recorrido es muy corto (menos de 100 m). ¿Descartarlo?')) return;
+    trkDiscard(); render(true); return;
+  }
+  trkHalt();
+  const line = trk.pts.length > 1 ? encodePoly(thin(trk.pts.map(q => [q[0], q[1]]))) : undefined;
+  state.runs.push({ id: uid(), date: ymd(new Date(trk.t0)), km: Math.round(km * 100) / 100, min: Math.round(min * 10) / 10, note: '', source: 'gps', poly: line });
+  trk = null; try { localStorage.removeItem(TRK_KEY); } catch { /* nada */ }
+  save(); toast('Recorrido guardado'); location.hash = '#/correr'; render();
 }
 
 /* ---------- Temporizador de descanso ---------- */
@@ -573,19 +663,20 @@ V.correr = () => {
   const t = today(), since = addDays(t, -30);
   const m = runs.filter(r => r.date >= since);
   const km = m.reduce((a, r) => a + r.km, 0), min = m.reduce((a, r) => a + r.min, 0);
-  const strava = !CFG.STRAVA_CLIENT_ID || !sb ? `<div class="card"><h3>Adidas Running → Strava</h3><p class="muted small">Para importar tus carreras automáticamente hay que configurar Supabase y Strava (guía en el README). Mientras tanto podés cargarlas a mano.</p></div>`
-    : !user ? `<div class="card"><h3>Strava</h3><p class="muted small">Iniciá sesión con tu cuenta para conectar Strava.</p></div>`
-    : state.strava.connected ? `<div class="card gold"><div class="row between"><div><h3>Strava conectado</h3><div class="muted small">${state.strava.lastSync ? 'Última sync: ' + new Date(state.strava.lastSync * 1000).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : 'Sin sincronizar aún'}</div></div>
-      <button data-act="strava-sync">Sincronizar</button></div></div>`
-    : `<div class="card gold"><h3>Conectar Strava</h3><p class="muted small">En la app Adidas Running activá Ajustes → Apps conectadas → Strava (una sola vez). Después conectá Strava acá y tus carreras llegarán solas.</p>
-      <button class="btn-primary btn-block" data-act="strava-connect">Conectar con Strava</button></div>`;
-  return `<h1>Correr</h1><p class="sub">Tus carreras de Adidas Running, vía Strava, o cargadas a mano.</p>${strava}
+  const auto = !sb ? `<div class="card"><h3>Carreras automáticas</h3><p class="muted small">Se activan con la cuenta en la nube (ver README).</p></div>`
+    : !user ? `<div class="card"><h3>Carreras automáticas</h3><p class="muted small">Iniciá sesión con tu cuenta para recibir tus carreras de Adidas Running.</p></div>`
+    : `<div class="card gold"><div class="row between"><div><h3>Carreras automáticas</h3><div class="muted small">Adidas Running → Salud / Health Connect → tu cuenta</div></div><button data-act="inbox-pull">Revisar</button></div>
+        <p class="muted small" style="margin:10px 0 0">${state.settings.hasToken ? 'Token creado. Las carreras nuevas llegan solas al abrir la app.' : 'Primera vez: Ajustes → Carreras automáticas para crear tu token.'}</p></div>`;
+  const draft = trk ? `<div class="card red"><div class="row between"><div><h3>Recorrido ${trk.paused ? 'en pausa' : 'en curso'}</h3><div class="muted small">${fmtN(trk.dist / 1000, 2)} km · ${fmtTime(trkElapsed())}</div></div><button class="btn-primary" data-act="goto-track">Continuar</button></div></div>` : '';
+  return `<h1>Correr</h1><p class="sub">Tus carreras de Adidas Running, rastreadas con el GPS de la app, o cargadas a mano. Cada una guarda su recorrido cuando es posible.</p>${draft}${auto}
+  <div class="grid2" style="margin-bottom:12px"><button class="btn-primary" data-act="goto-track">Rastrear con GPS</button><button data-act="run-new">+ Cargar a mano</button></div>
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Salidas</span></div><div class="card stat"><b>${fmtPace(min, km)}</b><span>Ritmo medio</span></div></div>
   ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Ritmo por salida (min/km)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>` : ''}
-  <button class="btn-primary btn-block" data-act="run-new" style="margin-bottom:12px">+ Registrar carrera a mano</button>
-  ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item"><div class="grow"><b>${fmtN(r.km, 2)} km</b> · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}
-    <div class="muted small">${fmtD(r.date)}${r.note ? ' · ' + esc(r.note) : ''}${r.source === 'strava' ? ' · <span class="gold-t">Strava</span>' : ''}</div></div>
+  ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item">
+    ${r.poly ? `<button class="thumbbtn" data-act="run-view" data-id="${r.id}" aria-label="Ver recorrido">${routeSvg(r.poly, { w: 64, h: 64, pad: 6, thumb: true })}</button>` : ''}
+    <div class="grow"><b>${fmtN(r.km, 2)} km</b> · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}
+    <div class="muted small">${fmtD(r.date)}${r.note ? ' · ' + esc(r.note) : ''}${r.source === 'gps' ? ' · <span class="gold-t">GPS</span>' : r.source === 'bridge' ? ' · <span class="gold-t">Adidas</span>' : ''}</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin carreras registradas.</div>`}`;
 };
 function afterCorrer() {
@@ -596,6 +687,21 @@ function afterCorrer() {
   const last = runs.filter(r => r.min > 0 && r.km > 0).slice(-15);
   drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(r.min / r.km * 100) / 100), REDHI)] }, options: chartBase({ scales: { x: { grid: { color: '#24211c' } }, y: { reverse: true, grid: { color: '#24211c' } } } }) });
 }
+
+/* --- Rastrear (GPS) --- */
+V.rastrear = () => {
+  const has = !!trk, running = has && !trk.paused, km = trk ? trk.dist / 1000 : 0;
+  const line = trk && trk.pts.length > 1 ? routeSvg(encodePoly(thin(trk.pts.map(q => [q[0], q[1]])))) : '';
+  return `<h1>Rastrear carrera</h1><p class="sub">Guarda tu recorrido con el GPS del celular. Mantené la app abierta y la pantalla encendida mientras corrés: si la bloqueás o cambiás de app, el GPS se detiene.</p>
+  <div class="card gold"><div class="stat" style="padding-top:0"><b id="trk-dist" style="font-size:46px">${fmtN(km, 2)}</b><span>Kilómetros</span></div>
+    <div class="grid2"><div class="stat"><b id="trk-time">${fmtTime(trkElapsed())}</b><span>Tiempo</span></div><div class="stat"><b id="trk-pace">${km > 0.05 ? fmtPace(trkElapsed(), km) : '–'}</b><span>Ritmo medio</span></div></div></div>
+  <div class="card"><div class="map" id="trk-map">${line}</div><p class="muted small center" id="trk-acc" style="margin:10px 0 0">${has ? '' : 'Tocá “Iniciar” y permití el acceso a la ubicación.'}</p></div>
+  ${!has ? `<button class="btn-primary btn-block" data-act="trk-start">Iniciar recorrido</button>`
+    : running ? `<div class="grid2"><button data-act="trk-pause">Pausar</button><button class="btn-primary" data-act="trk-finish">Terminar</button></div>`
+    : `<button class="btn-primary btn-block" data-act="trk-start">Reanudar</button>
+       <div class="grid2" style="margin-top:10px"><button data-act="trk-finish">Terminar y guardar</button><button class="btn-danger" data-act="trk-discard">Descartar</button></div>`}`;
+};
+function afterRastrear() { trkTick(); if (trk && !trk.paused && trk.watch == null) trkStart(); }
 
 /* --- Ajustes --- */
 V.ajustes = () => `
@@ -610,7 +716,12 @@ V.ajustes = () => `
     <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
     <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label></div>` : ''}
   <div class="card"><h3>Descanso entre series</h3><label>Segundos</label><input type="number" inputmode="numeric" min="10" max="600" step="5" data-in="rest" value="${state.settings.rest}"></div>
-  ${stravaReady() && state.strava.connected ? `<div class="card"><h3>Strava</h3><p class="muted small">Conectado.</p><button class="btn-danger" data-act="strava-off">Desconectar Strava</button></div>` : ''}
+  ${sb && user ? `<div class="card"><h3>Carreras automáticas</h3>
+    <p class="muted small">Adidas Running pasa tus carreras a Salud (iPhone) o Health Connect (Android). Un “puente” en tu celular las envía a tu cuenta con un token personal. Guía paso a paso: <b>docs/CARRERAS.md</b> en el repositorio.</p>
+    <label>Dirección de envío</label><input readonly value="${esc(INGEST_URL())}" onfocus="this.select()">
+    <div class="row wrap" style="margin-top:12px"><button data-act="copy" data-v="${esc(INGEST_URL())}">Copiar dirección</button>
+    <button data-act="token-new">${state.settings.hasToken ? 'Generar token nuevo' : 'Generar token'}</button><button data-act="inbox-pull">Revisar carreras</button></div>
+    ${state.settings.hasToken ? '<p class="muted small" style="margin:10px 0 0">Un token nuevo reemplaza al anterior: tendrás que actualizarlo en el puente.</p>' : ''}</div>` : ''}
   <div class="card"><h3>Respaldo</h3><p class="muted small">Descargá todos tus datos o restaurá un respaldo.</p>
     <div class="row wrap"><button data-act="export">Exportar JSON</button><button data-act="import">Importar JSON</button></div>
     <input type="file" id="impfile" accept="application/json" class="hidden"></div>
@@ -727,7 +838,8 @@ function needAuth() { return sb && !user && !localStorage.getItem(LS_LOCAL); }
 function render(keepScroll = false) {
   const y = window.scrollY;
   const r = route();
-  const tabIdx = k => TABS.findIndex(t => t[0] === k);
+  const navKey = k => k === 'rastrear' ? 'correr' : k;
+  const tabIdx = k => TABS.findIndex(t => t[0] === navKey(k));
   const target = V[r] && !r.startsWith('prog_') ? r : 'foro';
   const slide = !keepScroll && !!ui.lastRoute && ui.lastRoute !== target && r !== 'auth' && !needAuth();
   const ghost = slide ? Motion.ghost($('#view')) : null; // captura la pantalla actual antes de reemplazarla
@@ -740,12 +852,13 @@ function render(keepScroll = false) {
   view.innerHTML = V[name]();
   window.scrollTo(0, keepScroll ? y : 0);
   const dir = tabIdx(name) >= tabIdx(ui.lastRoute) ? 1 : -1;
-  Motion.setNav(name, TABS); Motion.enter(view, !keepScroll, { dir, slide });
+  Motion.setNav(navKey(name), TABS); Motion.enter(view, !keepScroll, { dir, slide });
   if (ghost) Motion.leave(ghost, dir);
   if (!keepScroll && ui.lastRoute !== name) { Motion.sweep(); ui.lastRoute = name; }
   const x = xpInfo(); $('#rankChip').textContent = `${x.roman} · ${x.rank.name}`;
   if (name === 'progreso') afterProgreso();
   if (name === 'correr') afterCorrer();
+  if (name === 'rastrear') afterRastrear();
   if (name === 'arena') afterArena();
 }
 
@@ -889,9 +1002,29 @@ const ACTIONS = {
     save(); closeModal(); toast('Carrera registrada'); render(true);
   },
   'run-del': el => { if (confirm('¿Eliminar esta carrera?')) { state.runs = state.runs.filter(r => r.id !== el.dataset.id); save(); render(true); } },
-  'strava-connect': stravaConnect,
-  'strava-sync': () => syncStrava(false),
-  'strava-off': stravaDisconnect,
+  'goto-track': () => { location.hash = '#/rastrear'; },
+  'trk-start': () => { trkStart(); render(true); },
+  'trk-pause': () => trkPause(),
+  'trk-finish': () => trkFinish(),
+  'trk-discard': () => { if (confirm('¿Descartar este recorrido? No se puede deshacer.')) { trkDiscard(); render(true); } },
+  'run-view': el => {
+    const r = state.runs.find(x => x.id === el.dataset.id); if (!r?.poly) return;
+    openModal(`<h2 style="margin-top:0">${fmtN(r.km, 2)} km</h2><p class="sub">${fmtD(r.date)} · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}</p>
+      <div class="map">${routeSvg(r.poly)}</div><p class="muted small center" style="margin:10px 0 0"><span class="me-dot"></span>Salida <span class="ri-dot" style="margin-left:12px"></span>Llegada</p>
+      <button class="btn-ghost btn-block" style="margin-top:14px" data-act="modal-close">Cerrar</button>`);
+  },
+  'inbox-pull': () => pullInbox(false),
+  'token-new': async () => {
+    if (state.settings.hasToken && !confirm('El token anterior dejará de funcionar. ¿Generar uno nuevo?')) return;
+    try {
+      const t = await newToken();
+      openModal(`<h2 style="margin-top:0">Tu token personal</h2><p class="sub">Copialo ahora y pegalo en el puente de tu celular. <b>No se vuelve a mostrar.</b> Quien lo tenga puede enviarte carreras, así que no lo compartas.</p>
+        <div class="tokenbox">${t}</div>
+        <div class="row" style="margin-top:14px"><button class="btn-primary grow" data-act="copy" data-v="${t}">Copiar token</button><button class="btn-ghost grow" data-act="modal-close">Listo</button></div>`);
+      render(true);
+    } catch (e) { console.warn(e); toast('No se pudo crear el token. ¿Ejecutaste el esquema SQL actualizado?'); }
+  },
+  copy: async el => { try { await navigator.clipboard.writeText(el.dataset.v); toast('Copiado'); } catch { toast('No se pudo copiar: seleccionalo y copialo a mano'); } },
 
   // ajustes / auth
   'sync-now': async () => { setSyncBadge('pend'); await pushRemote(); toast(ui.sync === 'ok' ? 'Sincronizado' : 'No se pudo sincronizar'); },
@@ -930,7 +1063,7 @@ async function authSubmit(isSignup) {
     if (error) throw error;
     if (!data.session) { err.style.color = 'var(--gold-hi)'; err.textContent = 'Cuenta creada. Revisá tu email para confirmarla y luego iniciá sesión.'; return; }
     user = data.session.user; localStorage.removeItem(LS_LOCAL);
-    await initialSync(); location.hash = '#/foro'; render(); syncStrava(true);
+    await initialSync(); location.hash = '#/foro'; render(); pullInbox(true);
   } catch (ex) {
     err.style.color = ''; const m = String(ex.message || ex);
     err.textContent = /Invalid login/i.test(m) ? 'Email o contraseña incorrectos.' : /already/i.test(m) ? 'Ese email ya tiene cuenta. Iniciá sesión.' : 'Error: ' + m;
@@ -979,14 +1112,18 @@ window.addEventListener('hashchange', () => render());
 $('#rankChip').addEventListener('click', () => { location.hash = '#/foro'; });
 $('#gear').addEventListener('click', () => { location.hash = '#/ajustes'; });
 window.addEventListener('online', () => { if (sb && user) pushRemote(); });
-document.addEventListener('visibilitychange', () => { if (!document.hidden && stravaReady() && state.strava.connected) syncStrava(true); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { trkSave(); return; }
+  if (trk && !trk.paused) trkWake();
+  if (sb && user) pullInbox(true);
+});
 
 /* ---------- Arranque ---------- */
 async function boot() {
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => { });
   }
-  loadState();
+  loadState(); trkLoad();
   Motion.buildNav(TABS);
   if (window.Chart) { Chart.defaults.color = '#8a8478'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
   if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase) {
@@ -995,7 +1132,7 @@ async function boot() {
     sb.auth.onAuthStateChange((_e, s) => { user = s?.user || null; });
   }
   render();
-  if (user) { await initialSync(); render(true); await handleStravaCallback(); syncStrava(true); }
+  if (user) { await initialSync(); render(true); await pullInbox(true); }
   else if (sb) { history.replaceState({}, '', location.pathname + location.hash); }
   if (state.active) { /* sesión en curso restaurada */ }
 }
