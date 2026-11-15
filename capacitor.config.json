@@ -1,0 +1,7 @@
+{
+  "appId": "com.imperium.gladiador",
+  "appName": "Imperium",
+  "webDir": "www",
+  "backgroundColor": "#0b0a09",
+  "server": { "androidScheme": "https" }
+}

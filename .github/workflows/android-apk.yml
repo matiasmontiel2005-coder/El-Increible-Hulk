@@ -1,0 +1,92 @@
+name: APK Android
+
+# Compila la app de Android (Capacitor) y la publica en Releases:
+# https://github.com/matiasmontiel2005-coder/El-Increible-Hulk/releases/tag/android-latest
+on:
+  push:
+    branches: [main, 'feat/**']
+    paths:
+      - 'index.html'
+      - 'app.js'
+      - 'motion.js'
+      - 'styles.css'
+      - 'config.js'
+      - 'manifest.webmanifest'
+      - 'vendor/**'
+      - 'icons/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'capacitor.config.json'
+      - 'scripts/**'
+      - 'android-signing/**'
+      - '.github/workflows/android-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Preparar la app web
+        run: node scripts/prepare-www.mjs
+
+      - name: Generar el proyecto Android
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Ícono, pantalla de arranque y versión
+        run: bash scripts/android-customize.sh
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+
+      - name: Firma estable (para poder actualizar encima de una instalación previa)
+        run: |
+          mkdir -p ~/.android
+          cp android-signing/debug.keystore ~/.android/debug.keystore
+
+      - name: Compilar el APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Nombrar el archivo
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk imperium.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: imperium-apk
+          path: imperium.apk
+
+      - name: Publicar en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete android-latest --cleanup-tag --yes || true
+          gh release create android-latest imperium.apk \
+            --target "$GITHUB_SHA" \
+            --title "App Android (última versión)" \
+            --notes "APK de Imperium compilado desde ${GITHUB_REF_NAME} (commit ${GITHUB_SHA::7}). Descargalo desde el celular e instalalo; la guía está en docs/ANDROID.md."

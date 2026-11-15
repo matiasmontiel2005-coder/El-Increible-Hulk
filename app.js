@@ -3,6 +3,9 @@
 'use strict';
 
 const CFG = window.IMPERIUM_CONFIG || {};
+// Dentro del APK de Android (Capacitor) el GPS corre en segundo plano; en la web solo con la pantalla encendida.
+const NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const APK_URL = 'https://github.com/matiasmontiel2005-coder/El-Increible-Hulk/releases/download/android-latest/imperium.apk';
 const LS_STATE = 'imperium.state.v1';
 const LS_LOCAL = 'imperium.localmode';
 
@@ -66,7 +69,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /* ---------- Estado ---------- */
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
-  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true, shareRoutes: true, trim: true },
+  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true, shareRoutes: true },
   active: null, settings: { rest: 90, hasToken: false }
 });
 let state = emptyState();
@@ -293,14 +296,6 @@ function routeSvg(poly, { w = 340, h = 280, pad = 22, thumb = false } = {}) {
     <circle class="rs" cx="${st[0].toFixed(1)}" cy="${st[1].toFixed(1)}" r="${r}"/><circle class="re" cx="${en[0].toFixed(1)}" cy="${en[1].toFixed(1)}" r="${r}"/></svg>`;
 }
 
-// Recorta los primeros y últimos `m` metros (para no revelar dónde vivís). Devuelve '' si el recorrido es demasiado corto.
-function trimPoly(poly, m = 200) {
-  const pts = decodePoly(poly); if (pts.length < 2) return '';
-  const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hav(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
-  const total = cum[cum.length - 1]; if (total < 2 * m + 100) return '';
-  const keep = pts.filter((_, i) => cum[i] >= m && cum[i] <= total - m);
-  return keep.length >= 2 ? encodePoly(keep) : '';
-}
 // Datos que llegan de otra cuenta: se validan antes de usarlos.
 function cleanRun(r) {
   if (!r || typeof r !== 'object') return null;
@@ -361,11 +356,12 @@ function trkSave() {
   try { localStorage.setItem(TRK_KEY, JSON.stringify({ pts: trk.pts, dist: trk.dist, t0: trk.t0, pausedMs: trk.pausedMs, savedAt: Date.now() })); } catch { /* sin espacio */ }
 }
 const trkElapsed = () => trk ? ((trk.paused ? trk.pausedAt : Date.now()) - trk.t0 - trk.pausedMs) / 60000 : 0;
-async function trkWake() { try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch { /* sin wake lock */ } }
+async function trkWake() { try { if (!NATIVE && 'wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); } } catch { /* sin wake lock */ } }
 function trkRelease() { try { wake?.release(); } catch { /* nada */ } wake = null; }
 function trkPos(p) {
   if (!trk || trk.paused) return;
   const { latitude: la, longitude: lo, accuracy: ac } = p.coords; trk.acc = ac;
+  if (!Number.isFinite(la) || !Number.isFinite(lo) || Math.abs(la) > 90 || Math.abs(lo) > 180) return; // punto inválido: se ignora
   if (ac > 35) return; // señal imprecisa: se descarta
   const last = trk.pts[trk.pts.length - 1];
   if (last) {
@@ -381,15 +377,34 @@ function trkErr(e) {
   if (e.code === 1) { trkPause(); toast('Falta el permiso de ubicación: activalo en los ajustes del navegador'); }
   else if (trk) trk.acc = null;
 }
-function trkStart() {
-  if (!navigator.geolocation) return toast('Este dispositivo no permite usar el GPS');
+const BG = NATIVE ? window.Capacitor.registerPlugin('BackgroundGeolocation') : null;
+async function watchStart() {
+  if (!NATIVE) return navigator.geolocation.watchPosition(trkPos, trkErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+  return BG.addWatcher({ backgroundTitle: 'Imperium', backgroundMessage: 'Registrando tu carrera', requestPermissions: true, stale: false, distanceFilter: 3 }, (loc, err) => {
+    if (err) {
+      if (err.code === 'NOT_AUTHORIZED') { toast('Falta el permiso de ubicación: activalo en los ajustes'); try { BG.openSettings(); } catch { /* nada */ } trkPause(); }
+      return;
+    }
+    if (loc) trkPos({ coords: { latitude: loc.latitude, longitude: loc.longitude, accuracy: loc.accuracy }, timestamp: loc.time || Date.now() });
+  });
+}
+function watchStop(id) { try { if (NATIVE) BG.removeWatcher({ id }); else navigator.geolocation.clearWatch(id); } catch { /* ya estaba detenido */ } }
+async function trkStart() {
+  if (!NATIVE && !navigator.geolocation) return toast('Este dispositivo no permite usar el GPS');
   if (!trk) trk = { pts: [], dist: 0, t0: Date.now(), pausedMs: 0, paused: false, pausedAt: 0, watch: null, acc: null };
   if (trk.paused && trk.pausedAt) { trk.pausedMs += Date.now() - trk.pausedAt; trk.pausedAt = 0; }
   trk.paused = false;
-  if (trk.watch == null) trk.watch = navigator.geolocation.watchPosition(trkPos, trkErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
   trkWake(); clearInterval(trkTimer); trkTimer = setInterval(trkTick, 1000); trkSave(); trkTick();
+  if (trk.watch == null && !trk.starting) {
+    trk.starting = true;
+    try {
+      const id = await watchStart();
+      if (!trk || trk.paused) watchStop(id); else trk.watch = id; // si se pausó mientras arrancaba, se cierra
+    } catch (e) { console.warn(e); toast('No se pudo iniciar el GPS'); if (trk) { trk.paused = true; trk.pausedAt = Date.now(); } }
+    finally { if (trk) trk.starting = false; }
+  }
 }
-function trkHalt() { if (trk?.watch != null) navigator.geolocation.clearWatch(trk.watch); if (trk) trk.watch = null; clearInterval(trkTimer); trkTimer = null; trkRelease(); }
+function trkHalt() { if (trk?.watch != null) watchStop(trk.watch); if (trk) trk.watch = null; clearInterval(trkTimer); trkTimer = null; trkRelease(); }
 function trkPause() { if (!trk || trk.paused) return; trk.paused = true; trk.pausedAt = Date.now(); trkHalt(); trkSave(); if (route() === 'rastrear') render(true); }
 function trkTick() {
   if (!trk) return;
@@ -713,7 +728,10 @@ function afterCorrer() {
 V.rastrear = () => {
   const has = !!trk, running = has && !trk.paused, km = trk ? trk.dist / 1000 : 0;
   const line = trk && trk.pts.length > 1 ? routeSvg(encodePoly(thin(trk.pts.map(q => [q[0], q[1]])))) : '';
-  return `<h1>Rastrear carrera</h1><p class="sub">Guarda tu recorrido con el GPS del celular. Mantené la app abierta y la pantalla encendida mientras corrés: si la bloqueás o cambiás de app, el GPS se detiene.</p>
+  const hint = NATIVE ? 'Tocá “Iniciar” y empezá a correr. Podés bloquear la pantalla o usar otras apps: el recorrido se sigue registrando (verás una notificación mientras tanto). Terminá con el botón “Terminar”.'
+    : 'Guarda tu recorrido con el GPS del celular. Mantené la app abierta y la pantalla encendida mientras corrés: si la bloqueás o cambiás de app, el GPS se detiene.';
+  const apk = !NATIVE && !has && /Android/i.test(navigator.userAgent) ? `<div class="card gold"><h3>App para Android</h3><p class="muted small">Para registrar con la pantalla apagada instalá la app de Android.</p><a class="btn btn-block" href="${APK_URL}" style="text-decoration:none">Descargar APK</a></div>` : '';
+  return `<h1>Rastrear carrera</h1><p class="sub">${hint}</p>${apk}
   <div class="card gold"><div class="stat" style="padding-top:0"><b id="trk-dist" style="font-size:46px">${fmtN(km, 2)}</b><span>Kilómetros</span></div>
     <div class="grid2"><div class="stat"><b id="trk-time">${fmtTime(trkElapsed())}</b><span>Tiempo</span></div><div class="stat"><b id="trk-pace">${km > 0.05 ? fmtPace(trkElapsed(), km) : '–'}</b><span>Ritmo medio</span></div></div></div>
   <div class="card"><div class="map" id="trk-map">${line}</div><p class="muted small center" id="trk-acc" style="margin:10px 0 0">${has ? '' : 'Tocá “Iniciar” y permití el acceso a la ubicación.'}</p></div>
@@ -733,11 +751,10 @@ V.ajustes = () => `
       : `<p class="muted small">Estás usando la app sin cuenta: tus datos viven solo en este dispositivo.</p><button class="btn-primary" data-act="goto-auth">Iniciar sesión / crear cuenta</button>`)
       : `<p class="muted small" id="syncBadge">${syncText()}. Configurá Supabase en <code>config.js</code> para activar cuentas y sincronización (ver README).</p>`}
   </div>
-  ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords y cargas máximas) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten. Tus recorridos con su mapa se comparten solo si dejás activada la opción de abajo.</p>
+  ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords y cargas máximas) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten. Tus recorridos (con su mapa completo, de punta a punta) se comparten solo si dejás activada la opción de abajo.</p>
     <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
     <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label>
-    <label class="switch"><input type="checkbox" data-in="proutes" ${state.profile?.shareRoutes !== false ? 'checked' : ''}> Compartir mis recorridos (mapa) con otros</label>
-    <label class="switch"><input type="checkbox" data-in="ptrim" ${state.profile?.trim !== false ? 'checked' : ''}> Ocultar 200 m al inicio y al final (recomendado: protege dónde vivís)</label></div>` : ''}
+    <label class="switch"><input type="checkbox" data-in="proutes" ${state.profile?.shareRoutes !== false ? 'checked' : ''}> Compartir mis recorridos (mapa) con otros</label></div>` : ''}
   <div class="card"><h3>Descanso entre series</h3><label>Segundos</label><input type="number" inputmode="numeric" min="10" max="600" step="5" data-in="rest" value="${state.settings.rest}"></div>
   ${sb && user ? `<div class="card"><h3>Carreras automáticas</h3>
     <p class="muted small">Adidas Running pasa tus carreras a Salud (iPhone) o Health Connect (Android). Un “puente” en tu celular las envía a tu cuenta con un token personal. Guía paso a paso: <b>docs/CARRERAS.md</b> en el repositorio.</p>
@@ -776,7 +793,7 @@ const profileName = () => (state.profile?.name || user?.user_metadata?.name || (
 function sharedRuns() {
   const p = state.profile || {}; if (p.shareRoutes === false) return [];
   return state.runs.filter(r => r.poly).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8)
-    .map(r => ({ date: r.date, km: r.km, min: r.min, poly: p.trim !== false ? trimPoly(r.poly) : r.poly })).filter(r => r.poly);
+    .map(r => ({ date: r.date, km: r.km, min: r.min, poly: r.poly }));
 }
 function buildStats() {
   const t = today(), ws = weekStart(t), since = addDays(t, -30), x = xpInfo(), td = [...trainingDates()];
@@ -1123,7 +1140,6 @@ document.addEventListener('input', ev => {
 document.addEventListener('change', ev => {
   const el = ev.target, k = el.dataset?.in; if (!k) return;
   if (k === 'proutes') { state.profile = { ...state.profile, shareRoutes: el.checked }; save(); toast(el.checked ? 'Tus recorridos serán visibles en la Arena' : 'Tus recorridos ya no se comparten'); }
-  else if (k === 'ptrim') { state.profile = { ...state.profile, trim: el.checked }; save(); toast(el.checked ? 'Se ocultan 200 m al inicio y al final' : 'Se comparte el recorrido completo'); }
   else if (k === 'pshare') { state.profile = { ...state.profile, share: el.checked }; save(); toast(el.checked ? 'Tu progreso es visible en la Arena' : 'Tu progreso ya no es visible'); }
   else if (k === 'startday') { ui.startDay = +el.value; render(true); }
   else if (k === 'progex') { ui.exId = el.value; render(true); }
@@ -1155,7 +1171,7 @@ document.addEventListener('visibilitychange', () => {
 
 /* ---------- Arranque ---------- */
 async function boot() {
-  if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  if (!NATIVE && 'serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('sw.js').catch(() => { });
   }
   loadState(); trkLoad();

@@ -2,7 +2,7 @@
 
 Adidas Running no tiene API pública, así que no se puede conectar directo. Lo que sí hace es guardar tus carreras en **Salud (iPhone)** o **Health Connect (Android)**. Un "puente" en el celular las manda a tu cuenta de Imperium con un **token personal**, y la app las recoge sola al abrirse.
 
-> **Importante sobre el recorrido (el mapa):** los puentes gratuitos que encontré **no** envían el trazado GPS, solo fecha, distancia y duración. Para que cada carrera quede con su recorrido, usá **Correr → Rastrear con GPS** dentro de la app. Si algún puente llegara a enviar la ruta, la función ya la acepta.
+> **Importante sobre el recorrido (el mapa):** los puentes gratuitos que encontré **no** envían el trazado GPS, solo fecha, distancia y duración. Para que cada carrera quede con su recorrido, usá **Correr → Rastrear con GPS** dentro de la app. Si algún puente llegara a enviar la ruta, la función ya la acepta. En **Android** se recomienda instalar la **app (APK)**, que registra el recorrido con la pantalla apagada: ver [ANDROID.md](ANDROID.md).
 
 ## Preparación (una sola vez, quien administra el proyecto)
 
@@ -52,9 +52,9 @@ En Imperium: **Ajustes → Carreras automáticas → Generar token**. Copiá el 
 
 ## Rastrear con GPS dentro de la app (iPhone y Android)
 
-**Correr → Rastrear con GPS → Iniciar recorrido.** La app guarda distancia, tiempo, ritmo y el trazado. Mantené la app abierta y la pantalla encendida: en iPhone, si bloqueás la pantalla o cambiás de app, el GPS se detiene. Si se cierra sin querer, queda un borrador que podés continuar o descartar.
+**Correr → Rastrear con GPS → Iniciar recorrido.** La app guarda distancia, tiempo, ritmo y el trazado. En iPhone mantené la app abierta y la pantalla encendida: si bloqueás la pantalla o cambiás de app, el GPS se detiene. En la app de Android no hace falta. Si se cierra sin querer, queda un borrador que podés continuar o descartar.
 
 ## Privacidad
-- Tus **últimos 8 recorridos** se muestran en la Arena a tu rival (con su mapa). Por defecto se ocultan los primeros y últimos 200 m para no revelar dónde vivís. Ambas cosas se controlan en **Ajustes → Arena**.
+- Tus **últimos 8 recorridos** se muestran en la Arena a tu rival, completos y con su mapa. Se puede apagar en **Ajustes → Arena**.
 - El mapa se dibuja en el propio dispositivo; no se usa ningún servicio de mapas externo.
 - El token solo permite **enviar** carreras a tu bandeja; no permite leer tus datos. Si lo perdés o lo compartiste, generá uno nuevo y el anterior deja de funcionar.

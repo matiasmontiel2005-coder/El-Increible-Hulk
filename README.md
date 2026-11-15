@@ -6,7 +6,7 @@ App web instalable (PWA) de entrenamiento con estética de imperio romano: rutin
 - **Rutina**: días de la semana, catálogo de ejercicios por grupo muscular (+ ejercicios propios), series, reps y peso objetivo.
 - **Entrenar**: registro en vivo serie a serie, referencia de la última vez, temporizador de descanso, detección de récords (PR).
 - **Progreso**: peso máximo y 1RM estimado por ejercicio, volumen, medidas corporales, constancia semanal.
-- **Correr**: rastreo con GPS (guarda el recorrido y lo dibuja), carga manual o carreras automáticas desde Adidas Running; km por semana y ritmo.
+- **Correr**: rastreo con GPS (en segundo plano en la app de Android; con la pantalla encendida en iPhone) (guarda el recorrido y lo dibuja), carga manual o carreras automáticas desde Adidas Running; km por semana y ritmo.
 - **Metas**: fuerza, cuerpo, running y constancia, con barra de progreso y estado (en ritmo / atrasada / cumplida).
 - **Arena**: cada persona tiene su propia cuenta y sus datos privados; la Arena muestra un duelo cara a cara (gloria, sesiones, km, récords, constancia, campañas), gráficos semanales, recorridos del rival con su mapa, cargas máximas en común y una clasificación.
 - **Rangos**: Recluta → Legionario → Optio → Centurión → Tribuno → Legado → Emperador, según tu gloria acumulada.
@@ -38,12 +38,15 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 ## Carreras automáticas y recorrido
 Adidas Running no tiene API pública. Sus carreras pasan a Salud (iPhone) o Health Connect (Android) y un puente en el celular las envía a tu cuenta con un token personal. Para guardar el **recorrido** de cada carrera se usa el rastreador GPS de la app. Guía completa, paso a paso para iPhone y Android: **[docs/CARRERAS.md](docs/CARRERAS.md)**.
 
+## App de Android
+Para registrar carreras con la pantalla apagada hay una app de Android (APK) que se compila sola en GitHub. Guía de instalación: **[docs/ANDROID.md](docs/ANDROID.md)**. En iPhone se usa la versión web instalada.
+
 ## Datos y privacidad
 - Todo se guarda primero en tu dispositivo; con cuenta, también en tu fila de Supabase (protegida por Row Level Security: solo vos la leés).
-- Tus **últimos 8 recorridos** (con su mapa) se publican en la Arena para que tu rival los vea. Se puede apagar en **Ajustes → Arena** ("Compartir mis recorridos"). Por defecto se **ocultan los primeros y últimos 200 m** para no revelar dónde vivís; también se puede desactivar. El mapa se dibuja en el dispositivo, sin servicios externos.
+- Tus **últimos 8 recorridos** (con su mapa) se publican en la Arena para que tu rival los vea. Se publican completos, de punta a punta, y se puede apagar en **Ajustes → Arena** ("Compartir mis recorridos"). El mapa se dibuja en el dispositivo, sin servicios externos.
 - El token de carreras solo permite enviar a tu bandeja; se guarda únicamente su huella (hash).
 - Podés exportar/importar un respaldo JSON desde **Ajustes**.
 - Sincronización: gana la versión más reciente (si editás en dos dispositivos sin conexión, se conserva la última que se guardó).
 
 ## Estructura
-`index.html` · `app.js` · `styles.css` · `config.js` · `sw.js` (offline) · `manifest.webmanifest` · `vendor/` (Chart.js y supabase-js locales) · `supabase/` (SQL y función `ingest-run`) · `docs/`
+`index.html` · `app.js` · `styles.css` · `config.js` · `sw.js` (offline) · `manifest.webmanifest` · `vendor/` (Chart.js y supabase-js locales) · `supabase/` (SQL y función `ingest-run`) · `docs/` · `package.json`, `capacitor.config.json`, `scripts/` y `.github/workflows/` (app de Android)
