@@ -66,7 +66,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /* ---------- Estado ---------- */
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
-  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true },
+  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true, shareRoutes: true, trim: true },
   active: null, settings: { rest: 90, hasToken: false }
 });
 let state = emptyState();
@@ -291,6 +291,27 @@ function routeSvg(poly, { w = 340, h = 280, pad = 22, thumb = false } = {}) {
   const st = P[0], en = P[P.length - 1], r = thumb ? 2.5 : 5;
   return `<svg class="route${thumb ? ' thumb' : ''}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Recorrido"><path class="line" pathLength="1" d="${d}"/>
     <circle class="rs" cx="${st[0].toFixed(1)}" cy="${st[1].toFixed(1)}" r="${r}"/><circle class="re" cx="${en[0].toFixed(1)}" cy="${en[1].toFixed(1)}" r="${r}"/></svg>`;
+}
+
+// Recorta los primeros y últimos `m` metros (para no revelar dónde vivís). Devuelve '' si el recorrido es demasiado corto.
+function trimPoly(poly, m = 200) {
+  const pts = decodePoly(poly); if (pts.length < 2) return '';
+  const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + hav(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]));
+  const total = cum[cum.length - 1]; if (total < 2 * m + 100) return '';
+  const keep = pts.filter((_, i) => cum[i] >= m && cum[i] <= total - m);
+  return keep.length >= 2 ? encodePoly(keep) : '';
+}
+// Datos que llegan de otra cuenta: se validan antes de usarlos.
+function cleanRun(r) {
+  if (!r || typeof r !== 'object') return null;
+  const km = Number(r.km), min = Number(r.min), poly = String(r.poly || ''), date = String(r.date || '');
+  if (!(km > 0 && km < 400) || !(min > 0 && min < 2000) || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^[\x3f-\x7e]{8,14000}$/.test(poly)) return null;
+  return { km, min, date, poly };
+}
+function runModal(r, who = '') {
+  openModal(`<h2 style="margin-top:0">${fmtN(r.km, 2)} km</h2><p class="sub">${who ? esc(who) + ' · ' : ''}${fmtD(r.date)} · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}</p>
+    <div class="map">${routeSvg(r.poly)}</div><p class="muted small center" style="margin:10px 0 0"><span class="me-dot"></span>Salida <span class="ri-dot" style="margin-left:12px"></span>Llegada</p>
+    <button class="btn-ghost btn-block" style="margin-top:14px" data-act="modal-close">Cerrar</button>`);
 }
 
 // --- Bandeja: carreras que el celular envió a la nube mientras la app estaba cerrada ---
@@ -712,9 +733,11 @@ V.ajustes = () => `
       : `<p class="muted small">Estás usando la app sin cuenta: tus datos viven solo en este dispositivo.</p><button class="btn-primary" data-act="goto-auth">Iniciar sesión / crear cuenta</button>`)
       : `<p class="muted small" id="syncBadge">${syncText()}. Configurá Supabase en <code>config.js</code> para activar cuentas y sincronización (ver README).</p>`}
   </div>
-  ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords y cargas máximas) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten.</p>
+  ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords y cargas máximas) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten. Tus recorridos con su mapa se comparten solo si dejás activada la opción de abajo.</p>
     <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
-    <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label></div>` : ''}
+    <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label>
+    <label class="switch"><input type="checkbox" data-in="proutes" ${state.profile?.shareRoutes !== false ? 'checked' : ''}> Compartir mis recorridos (mapa) con otros</label>
+    <label class="switch"><input type="checkbox" data-in="ptrim" ${state.profile?.trim !== false ? 'checked' : ''}> Ocultar 200 m al inicio y al final (recomendado: protege dónde vivís)</label></div>` : ''}
   <div class="card"><h3>Descanso entre series</h3><label>Segundos</label><input type="number" inputmode="numeric" min="10" max="600" step="5" data-in="rest" value="${state.settings.rest}"></div>
   ${sb && user ? `<div class="card"><h3>Carreras automáticas</h3>
     <p class="muted small">Adidas Running pasa tus carreras a Salud (iPhone) o Health Connect (Android). Un “puente” en tu celular las envía a tu cuenta con un token personal. Guía paso a paso: <b>docs/CARRERAS.md</b> en el repositorio.</p>
@@ -749,6 +772,12 @@ function streakWeeks() {
   return streak;
 }
 const profileName = () => (state.profile?.name || user?.user_metadata?.name || (user?.email || 'Gladiador').split('@')[0]).slice(0, 24);
+// Últimos recorridos que se publican en la Arena (solo si la persona lo permite).
+function sharedRuns() {
+  const p = state.profile || {}; if (p.shareRoutes === false) return [];
+  return state.runs.filter(r => r.poly).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 8)
+    .map(r => ({ date: r.date, km: r.km, min: r.min, poly: p.trim !== false ? trimPoly(r.poly) : r.poly })).filter(r => r.poly);
+}
 function buildStats() {
   const t = today(), ws = weekStart(t), since = addDays(t, -30), x = xpInfo(), td = [...trainingDates()];
   const weeks = [], wkm = [];
@@ -760,11 +789,11 @@ function buildStats() {
   const lifts = {};
   for (const e of allEx()) { const b = bestWeight(e.id); if (b > 0) lifts[e.name] = b; }
   return {
-    v: 1, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
+    v: 2, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
     sessions30: td.filter(d => d >= since).length,
     km30: Math.round(state.runs.filter(r => r.date >= since).reduce((q, r) => q + r.km, 0) * 10) / 10,
     goalsDone: state.goals.filter(g => goalProgress(g).pct >= 1).length,
-    weeks, wkm, lifts
+    weeks, wkm, lifts, runs: sharedRuns()
   };
 }
 async function pushProfile() {
@@ -790,6 +819,13 @@ async function afterArena() {
     if (!ui.rivals.some(r => r.user_id === ui.rivalId)) ui.rivalId = ui.rivals[0]?.user_id || null;
     renderArena();
   } catch (e) { console.warn(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('No se pudo cargar la arena. Revisá tu conexión.', '<br><br><button data-act="arena-refresh">Reintentar</button>'); }
+}
+function rrunsHtml(rv) {
+  ui.rivalRuns = (Array.isArray(rv.stats?.runs) ? rv.stats.runs : []).map(cleanRun).filter(Boolean);
+  if (!ui.rivalRuns.length) return `<h2>Recorridos de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no compartió recorridos.</div>`;
+  return `<h2>Recorridos de ${esc(rv.name)}</h2><div class="card">${ui.rivalRuns.map((r, i) => `<div class="list-item">
+    <button class="thumbbtn" data-act="arena-run" data-i="${i}" aria-label="Ver recorrido">${routeSvg(r.poly, { w: 64, h: 64, pad: 6, thumb: true })}</button>
+    <div class="grow"><b>${fmtN(r.km, 2)} km</b> · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}<div class="muted small">${fmtD(r.date)}</div></div></div>`).join('')}</div>`;
 }
 function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
   const tot = a + b, pa = tot ? a / tot * 100 : 50, pb = tot ? b / tot * 100 : 50;
@@ -818,6 +854,7 @@ function renderArena() {
   <div class="card">${rows.map(r => duelRow(...r)).join('')}</div>
   <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><p class="muted small" style="margin:0">Kilómetros por semana</p><div class="chart-box"><canvas id="ch2"></canvas></div></div>
+  ${rrunsHtml(rv)}
   <h2>Cargas máximas</h2>
   <div class="card">${lifts.length ? `<div class="lift head"><span>Ejercicio</span><span class="v">Tú</span><span class="v">${esc(rv.name).slice(0, 8)}</span></div>` + lifts.map(n => `<div class="lift"><span>${esc(n)}</span>
     <span class="v ${me.lifts[n] > s.lifts[n] ? 'win' : ''}">${fmtN(me.lifts[n])}</span><span class="v ${s.lifts[n] > me.lifts[n] ? 'win' : ''}">${fmtN(s.lifts[n])}</span></div>`).join('')
@@ -1007,12 +1044,7 @@ const ACTIONS = {
   'trk-pause': () => trkPause(),
   'trk-finish': () => trkFinish(),
   'trk-discard': () => { if (confirm('¿Descartar este recorrido? No se puede deshacer.')) { trkDiscard(); render(true); } },
-  'run-view': el => {
-    const r = state.runs.find(x => x.id === el.dataset.id); if (!r?.poly) return;
-    openModal(`<h2 style="margin-top:0">${fmtN(r.km, 2)} km</h2><p class="sub">${fmtD(r.date)} · ${fmtTime(r.min)} · ${fmtPace(r.min, r.km)}</p>
-      <div class="map">${routeSvg(r.poly)}</div><p class="muted small center" style="margin:10px 0 0"><span class="me-dot"></span>Salida <span class="ri-dot" style="margin-left:12px"></span>Llegada</p>
-      <button class="btn-ghost btn-block" style="margin-top:14px" data-act="modal-close">Cerrar</button>`);
-  },
+  'run-view': el => { const r = state.runs.find(x => x.id === el.dataset.id); if (r?.poly) runModal(r); },
   'inbox-pull': () => pullInbox(false),
   'token-new': async () => {
     if (state.settings.hasToken && !confirm('El token anterior dejará de funcionar. ¿Generar uno nuevo?')) return;
@@ -1042,6 +1074,7 @@ const ACTIONS = {
     const owner = state.owner; state = emptyState(); state.owner = owner; save();
     toast('Datos borrados'); render();
   },
+  'arena-run': el => { const r = ui.rivalRuns?.[+el.dataset.i]; const rv = (ui.rivals || []).find(x => x.user_id === ui.rivalId); if (r) runModal(r, rv?.name); },
   'arena-rival': el => { ui.rivalId = el.dataset.id; renderArena(); },
   'arena-refresh': (el, ev) => { ev?.preventDefault(); afterArena(); },
   'goto-settings': () => { location.hash = '#/ajustes'; },
@@ -1089,7 +1122,9 @@ document.addEventListener('input', ev => {
 });
 document.addEventListener('change', ev => {
   const el = ev.target, k = el.dataset?.in; if (!k) return;
-  if (k === 'pshare') { state.profile = { ...state.profile, share: el.checked }; save(); toast(el.checked ? 'Tu progreso es visible en la Arena' : 'Tu progreso ya no es visible'); }
+  if (k === 'proutes') { state.profile = { ...state.profile, shareRoutes: el.checked }; save(); toast(el.checked ? 'Tus recorridos serán visibles en la Arena' : 'Tus recorridos ya no se comparten'); }
+  else if (k === 'ptrim') { state.profile = { ...state.profile, trim: el.checked }; save(); toast(el.checked ? 'Se ocultan 200 m al inicio y al final' : 'Se comparte el recorrido completo'); }
+  else if (k === 'pshare') { state.profile = { ...state.profile, share: el.checked }; save(); toast(el.checked ? 'Tu progreso es visible en la Arena' : 'Tu progreso ya no es visible'); }
   else if (k === 'startday') { ui.startDay = +el.value; render(true); }
   else if (k === 'progex') { ui.exId = el.value; render(true); }
   else if (k === 'gmeasure') { const l = latestBody(el.value); const b = $('#g_b', $('#modal')); if (b) b.value = l ? l.value : ''; }

@@ -55,6 +55,6 @@ En Imperium: **Ajustes → Carreras automáticas → Generar token**. Copiá el 
 **Correr → Rastrear con GPS → Iniciar recorrido.** La app guarda distancia, tiempo, ritmo y el trazado. Mantené la app abierta y la pantalla encendida: en iPhone, si bloqueás la pantalla o cambiás de app, el GPS se detiene. Si se cierra sin querer, queda un borrador que podés continuar o descartar.
 
 ## Privacidad
-- Tu recorrido es **privado**: se guarda en tu documento personal y nunca se muestra en la Arena.
+- Tus **últimos 8 recorridos** se muestran en la Arena a tu rival (con su mapa). Por defecto se ocultan los primeros y últimos 200 m para no revelar dónde vivís. Ambas cosas se controlan en **Ajustes → Arena**.
 - El mapa se dibuja en el propio dispositivo; no se usa ningún servicio de mapas externo.
 - El token solo permite **enviar** carreras a tu bandeja; no permite leer tus datos. Si lo perdés o lo compartiste, generá uno nuevo y el anterior deja de funcionar.

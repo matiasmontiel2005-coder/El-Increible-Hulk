@@ -8,7 +8,7 @@ App web instalable (PWA) de entrenamiento con estética de imperio romano: rutin
 - **Progreso**: peso máximo y 1RM estimado por ejercicio, volumen, medidas corporales, constancia semanal.
 - **Correr**: rastreo con GPS (guarda el recorrido y lo dibuja), carga manual o carreras automáticas desde Adidas Running; km por semana y ritmo.
 - **Metas**: fuerza, cuerpo, running y constancia, con barra de progreso y estado (en ritmo / atrasada / cumplida).
-- **Arena**: cada persona tiene su propia cuenta y sus datos privados; la Arena muestra un duelo cara a cara (gloria, sesiones, km, récords, constancia, campañas), gráficos semanales, cargas máximas en común y una clasificación.
+- **Arena**: cada persona tiene su propia cuenta y sus datos privados; la Arena muestra un duelo cara a cara (gloria, sesiones, km, récords, constancia, campañas), gráficos semanales, recorridos del rival con su mapa, cargas máximas en común y una clasificación.
 - **Rangos**: Recluta → Legionario → Optio → Centurión → Tribuno → Legado → Emperador, según tu gloria acumulada.
 - **Nube** (opcional): cuenta y sincronización con Supabase. Sin configurarla, la app funciona 100 % local.
 
@@ -40,7 +40,7 @@ Adidas Running no tiene API pública. Sus carreras pasan a Salud (iPhone) o Heal
 
 ## Datos y privacidad
 - Todo se guarda primero en tu dispositivo; con cuenta, también en tu fila de Supabase (protegida por Row Level Security: solo vos la leés).
-- Tus recorridos GPS son privados (nunca van a la Arena) y el mapa se dibuja sin servicios externos.
+- Tus **últimos 8 recorridos** (con su mapa) se publican en la Arena para que tu rival los vea. Se puede apagar en **Ajustes → Arena** ("Compartir mis recorridos"). Por defecto se **ocultan los primeros y últimos 200 m** para no revelar dónde vivís; también se puede desactivar. El mapa se dibuja en el dispositivo, sin servicios externos.
 - El token de carreras solo permite enviar a tu bandeja; se guarda únicamente su huella (hash).
 - Podés exportar/importar un respaldo JSON desde **Ajustes**.
 - Sincronización: gana la versión más reciente (si editás en dos dispositivos sin conexión, se conserva la última que se guardó).
