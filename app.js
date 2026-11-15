@@ -41,8 +41,17 @@ const MEASURES = {
 };
 const LATIN = ['Per aspera ad astra.', 'Fortes fortuna adiuvat.', 'Si vis pacem, para bellum.', 'Citius, altius, fortius.',
   'Veni, vidi, vici.', 'Ad victoriam.', 'Disciplina est victoria.', 'Audentes fortuna iuvat.', 'Vincit qui se vincit.'];
-const TABS = [['foro', 'Foro'], ['rutina', 'Rutina'], ['entrenar', 'Entrenar'], ['progreso', 'Progreso'],
-  ['metas', 'Metas'], ['correr', 'Correr'], ['arena', 'Arena']];
+// Íconos de línea para la barra inferior (el nombre queda como etiqueta accesible y como ayuda al mantener presionado).
+const ICON = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const TABS = [
+  ['foro', 'Foro', ICON('<path d="M3 9.5 12 4l9 5.5"/><path d="M6 11.5v6M10 11.5v6M14 11.5v6M18 11.5v6"/><path d="M3.5 17.5h17M4.5 20.5h15"/>')],
+  ['rutina', 'Rutina', ICON('<rect x="4" y="5" width="16" height="15" rx="2.5"/><path d="M4 10h16M9 3v4M15 3v4"/><path d="M8 14h3M13 14h3M8 17h3"/>')],
+  ['entrenar', 'Entrenar', ICON('<path d="M7 12h10"/><rect x="4.2" y="8" width="2.8" height="8" rx="1"/><rect x="17" y="8" width="2.8" height="8" rx="1"/><path d="M2.4 10.5v3M21.6 10.5v3"/>')],
+  ['progreso', 'Progreso', ICON('<path d="M4 4v16h16"/><path d="M8 15l3.5-4 3 3L20 7.5"/><path d="M16 7.5h4v4"/>')],
+  ['metas', 'Metas', ICON('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/>')],
+  ['correr', 'Correr', ICON('<circle cx="15" cy="4.6" r="1.8"/><path d="M13.3 8.2 11 13.2"/><path d="M12.9 8.6l3.6 1.1 1.7 2.4"/><path d="M12.6 9l-3.1.4-2 1.9"/><path d="M11 13.2l3.4 2.3-.5 4.7"/><path d="M11 13.2l-2.5 3.2-3.5 1"/>')],
+  ['arena', 'Arena', ICON('<path d="M14.5 17.5 3.5 6.5v-3h3l11 11"/><path d="M13 19l6-6M16 16l4 4M19 21l2-2"/><path d="M9.5 17.5 20.5 6.5v-3h-3l-11 11"/><path d="M11 19l-6-6M8 16l-4 4M5 21l-2-2"/>')]
+];
 
 /* ---------- Utilidades ---------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -129,7 +138,7 @@ function xpInfo() {
   const xp = Math.round(state.sessions.length * 20 + sets + km * 3 + prs * 30 + goalsDone * 100);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
-  return { xp, rank: cur, roman: ROMAN[i], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
+  return { xp, rank: cur, roman: ROMAN[i], nextRoman: ROMAN[i + 1], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
 }
 
 function latestBody(type) { return state.body.filter(b => b.type === type).sort((a, b) => a.date.localeCompare(b.date)).pop() || null; }
@@ -302,11 +311,14 @@ V.foro = () => {
   const active = state.active;
   return `
   <div class="card gold hero">
-    <div class="laurel">${x.roman}</div>
-    <div class="rank-name">${x.rank.name}</div>
-    <div class="muted small" style="margin:4px 0 10px">${x.xp} puntos de gloria${x.next ? ` · faltan ${x.next.min - x.xp} para ${x.next.name}` : ' · rango máximo'}</div>
+    <div class="lvls">
+      <div class="lvl"><span class="k">Nivel actual</span><div class="laurel">${x.roman}</div><div class="rank-name">${x.rank.name}</div></div>
+      <div class="lvl nxt"><span class="k">Siguiente nivel</span><div class="laurel">${x.next ? x.nextRoman : '✦'}</div><div class="rank-name">${x.next ? x.next.name : 'Máximo'}</div></div>
+    </div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
-    <div class="muted small" style="margin-top:10px;font-style:italic">“${quote}”</div>
+    <div class="glory"><span>${x.xp} pts</span>${x.next ? `<span class="falta">Faltan <b>${x.next.min - x.xp}</b> puntos</span><span>${x.next.min} pts</span>` : '<span class="falta">Alcanzaste el nivel máximo</span><span></span>'}</div>
+    <p class="how">${x.next ? 'Sumás gloria con cada entreno (+20), serie (+1), kilómetro corrido (+3), récord (+30) y campaña cumplida (+100).' : 'Sos un Emperador. Mantené el ritmo.'}</p>
+    <div class="muted small" style="margin-top:12px;font-style:italic">“${quote}”</div>
   </div>
   <h2>Esta semana</h2>
   <div class="week">${week}</div>

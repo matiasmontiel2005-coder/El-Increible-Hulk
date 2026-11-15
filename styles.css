@@ -104,8 +104,10 @@ input[type=checkbox] { width: auto; accent-color: var(--gold); }
 /* Navegación inferior: solo texto + indicador deslizante */
 .tabs { position: fixed; z-index: 30; left: 0; right: 0; bottom: 0; max-width: 720px; margin: 0 auto; display: flex;
   background: rgba(11,10,9,.94); backdrop-filter: blur(8px); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-.tabs a { flex: 1 1 0; min-width: 0; text-align: center; padding: 16px 1px 15px; color: var(--muted); text-decoration: none; font-size: 7.5px; letter-spacing: .02em;
-  text-transform: uppercase; font-family: var(--serif); font-weight: 700; transition: color .3s; }
+.tabs a { flex: 1 1 0; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 15px 0 14px; color: var(--muted); text-decoration: none; transition: color .3s; }
+.tabs a svg { width: 26px; height: 26px; display: block; transition: transform .45s var(--spring); }
+.tabs a.on svg { transform: translateY(-1px) scale(1.1); }
+.tabs a:active svg { transform: scale(.88); }
 .tabs a.on { color: var(--gold-hi); }
 .tabs .ind { position: absolute; top: -1px; left: 0; height: 2px; width: calc(100% / var(--n, 7)); background: var(--gold);
   transform: translateX(calc(var(--idx, 0) * 100%)); transition: transform .5s var(--ease); }
@@ -162,11 +164,19 @@ body.sheet-open main { transform: scale(.955); filter: brightness(.55) blur(1.5p
 @keyframes toast { from { opacity: 0; transform: translate(-50%, 14px) scale(.96); } }
 
 /* Héroe de rango */
-.hero { text-align: center; padding: 30px 16px 26px; overflow: hidden; }
-.hero .laurel { font-family: var(--serif); font-size: 64px; font-weight: 500; line-height: 1; color: var(--gold); letter-spacing: .04em;
-  transform: translateY(calc(var(--sy, 0) * .12px)); opacity: calc(1 - var(--sy, 0) / 420); will-change: transform; }
-.hero .rank-name { font-family: var(--serif); font-size: 15px; font-weight: 500; color: var(--text); letter-spacing: .5em; text-transform: uppercase; margin: 14px 0 6px; padding-left: .5em; }
-.hero .bar { margin-top: 14px; }
+.hero { text-align: center; padding: 22px 16px 20px; overflow: hidden; }
+.lvls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; position: relative; }
+.lvls::after { content: "›"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -30%); font-size: 26px; color: var(--gold); opacity: .7; font-family: var(--serif); }
+.lvl .k { display: block; font-size: 9.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+.hero .laurel { font-family: var(--serif); font-size: 46px; font-weight: 500; line-height: 1; color: var(--gold); letter-spacing: .04em; will-change: transform; }
+.lvl.nxt .laurel { color: var(--muted); opacity: .75; }
+.hero .rank-name { font-family: var(--serif); font-size: 13px; font-weight: 500; color: var(--text); letter-spacing: .22em; text-transform: uppercase; margin-top: 10px; padding-left: .22em; }
+.lvl.nxt .rank-name { color: var(--muted); }
+.hero .bar { margin-top: 4px; height: 5px; }
+.glory { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-top: 8px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.glory .falta { color: var(--text); font-size: 13px; }
+.glory .falta b { color: var(--gold-hi); font-family: var(--serif); font-size: 17px; font-weight: 500; }
+.hero .how { margin: 12px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--muted); }
 .list-item { display: flex; align-items: center; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .list-item:last-child { border-bottom: 0; padding-bottom: 0; }
 .list-item:first-child { padding-top: 0; }

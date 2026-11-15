@@ -76,7 +76,7 @@ window.Motion = (() => {
   function buildNav(tabs) {
     const nav = $('#tabs');
     nav.style.setProperty('--n', tabs.length);
-    nav.innerHTML = '<i class="ind"></i>' + tabs.map(([k, n]) => `<a href="#/${k}" data-tab="${k}">${n}</a>`).join('');
+    nav.innerHTML = '<i class="ind"></i>' + tabs.map(([k, n, ic]) => `<a href="#/${k}" data-tab="${k}" aria-label="${n}" title="${n}">${ic || n}</a>`).join('');
   }
   function setNav(key, tabs) {
     const nav = $('#tabs');
