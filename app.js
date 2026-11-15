@@ -939,7 +939,14 @@ window.addEventListener('online', () => { if (sb && user) pushRemote(); });
 /* ---------- Arranque ---------- */
 async function boot() {
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    const hadController = !!navigator.serviceWorker.controller;
     navigator.serviceWorker.register('sw.js').catch(() => { });
+    // Cuando hay una versión nueva, la app se recarga sola (salvo que estés cargando algo).
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || ui.reloading) return;
+      if (!$('#modal').classList.contains('hidden') || state.active) return toast('Hay una versión nueva: cerrá y abrí la app para actualizar', 6000);
+      ui.reloading = true; location.reload();
+    });
   }
   loadState();
   Motion.buildNav(TABS);
