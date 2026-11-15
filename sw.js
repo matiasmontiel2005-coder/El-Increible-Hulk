@@ -1,4 +1,4 @@
-const VERSION = 'imperium-v3';
+const VERSION = 'imperium-v4';
 const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png'];
 
