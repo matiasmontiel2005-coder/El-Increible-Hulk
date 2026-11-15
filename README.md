@@ -25,7 +25,7 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 ## Activar cuenta y sincronización (Supabase)
 1. Creá un proyecto gratis en https://supabase.com.
 2. **SQL Editor** → pegá y ejecutá `supabase/schema.sql`.
-3. **Authentication → Sign In / Providers → Email**. Si no querés confirmar por email, desactivá "Confirm email".
+3. **Authentication → Sign In / Providers → Email**. Recomendado: dejá activado "Confirm email" y poné un largo mínimo de contraseña de 8 o más.
 4. **Authentication → URL Configuration**: poné la URL de tu GitHub Pages como *Site URL*.
 5. **Project Settings → API**: copiá la *Project URL* y la clave **anon** en `config.js`. **Nunca uses la `service_role` en `config.js`.**
 
@@ -35,6 +35,9 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 - Cada uno puede dejar de compartir desde **Ajustes → Arena** (y deja de ver a los demás).
 - Si ya habías ejecutado una versión anterior del esquema, volvé a ejecutarlo: borra las tablas que ya no se usan. Para que solo entren ustedes dos: cuando ambos hayan creado su cuenta, en Supabase desactivá **Authentication → Sign In / Providers → "Allow new users to sign up"**. Así nadie más puede registrarse ni aparecer en la Arena.
 
+## Seguridad
+La app cubre los 20 puntos de una lista de ciberseguridad (claves, RLS, validación de datos, política de contenido, dependencias, errores, etc.). El estado de cada punto, **lo que tenés que configurar en Supabase y GitHub** y las limitaciones conocidas están en **[docs/SEGURIDAD.md](docs/SEGURIDAD.md)**. La base de datos se puede verificar con `supabase/tests/rls.test.mjs`.
+
 ## Datos y privacidad
 - Todo se guarda primero en tu dispositivo; con cuenta, también en tu fila de Supabase (protegida por Row Level Security: solo vos la leés).
 - Tus carreras (kilómetros, duración y ritmo) se publican en la Arena para que tu rival las vea. Si dejás de compartir tu progreso en **Ajustes → Arena**, dejan de verse.
@@ -42,4 +45,4 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 - Sincronización: gana la versión más reciente (si editás en dos dispositivos sin conexión, se conserva la última que se guardó).
 
 ## Estructura
-`index.html` · `app.js` · `styles.css` · `config.js` · `sw.js` (offline) · `manifest.webmanifest` · `vendor/` (Chart.js y supabase-js locales) · `supabase/` (esquema SQL)
+`index.html` · `app.js` · `motion.js` · `guard.js` · `styles.css` · `config.js` · `sw.js` (offline) · `manifest.webmanifest` · `vendor/` (Chart.js, supabase-js y la tipografía Cinzel, todo local) · `icons/` · `supabase/` (esquema SQL y pruebas de la base) · `docs/` (guía de seguridad)

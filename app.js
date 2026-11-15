@@ -3,6 +3,9 @@
 'use strict';
 
 const CFG = window.IMPERIUM_CONFIG || {};
+// Mensajes técnicos: solo se imprimen si activás la depuración a propósito (localStorage 'imperium.debug' = '1').
+const DEBUG = (() => { try { return localStorage.getItem('imperium.debug') === '1'; } catch { return false; } })();
+const dbg = (...a) => { if (DEBUG) console.warn(...a); };
 const LS_STATE = 'imperium.state.v1';
 const LS_LOCAL = 'imperium.localmode';
 
@@ -83,8 +86,84 @@ const emptyState = () => ({
 let state = emptyState();
 const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', exId: null, bodyType: 'peso', startDay: null };
 
+/* ---------- Saneado de datos: todo lo que viene de afuera (respaldo, nube, otra cuenta) se valida y se acota ---------- */
+const SAN = {
+  id: v => (typeof v === 'string' && v.length >= 1 && v.length <= 100 && !/[<>"'`&\\\u0000-\u001f]/.test(v)) ? v : null,
+  str: (v, max) => typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, '').slice(0, max) : '',
+  num: (v, min, max, dflt = null) => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt; },
+  // range: si el dato obligatorio está fuera de rango se descarta (en vez de inventar un valor recortado)
+  range: (v, min, max) => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) && n >= min && n <= max ? n : null; },
+  date: v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : null,
+  arr: (v, max) => Array.isArray(v) ? v.slice(0, max) : []
+};
+function sanSession(x) {
+  const id = SAN.id(x?.id), date = SAN.date(x?.date); if (!id || !date) return null;
+  return {
+    id, date, start: SAN.num(x.start, 0, 4e12, 0), name: SAN.str(x.name, 60) || 'Entrenamiento', dur: SAN.num(x.dur, 0, 2000, 0),
+    prs: SAN.arr(x.prs, 40).map(SAN.id).filter(Boolean),
+    entries: SAN.arr(x.entries, 80).map(e => {
+      const exId = SAN.id(e?.exId); if (!exId) return null;
+      return { exId, sets: SAN.arr(e.sets, 100).map(q => ({ w: SAN.num(q?.w, 0, 1000), r: SAN.num(q?.r, 0, 1000), done: q?.done === true })) };
+    }).filter(Boolean)
+  };
+}
+function sanitizeState(raw) {
+  const d = emptyState(); if (!raw || typeof raw !== 'object') return d;
+  d.owner = SAN.id(raw.owner); d.updated = SAN.num(raw.updated, 0, 4e12, 0);
+  d.exercises = SAN.arr(raw.exercises, 300).map(e => {
+    const id = SAN.id(e?.id), name = SAN.str(e?.name, 50).trim(); if (!id || !name) return null;
+    return { id, name, group: GROUPS.includes(e.group) ? e.group : 'Funcional', custom: true };
+  }).filter(Boolean);
+  for (let i = 0; i < 7; i++) {
+    const r = raw.routine?.[i]; if (!r || typeof r !== 'object') continue;
+    d.routine[i] = {
+      name: SAN.str(r.name, 40),
+      items: SAN.arr(r.items, 80).map(it => {
+        const id = SAN.id(it?.id), exId = SAN.id(it?.exId); if (!id || !exId) return null;
+        return { id, exId, sets: SAN.num(it.sets, 1, 50, 3), reps: SAN.num(it.reps, 1, 1000, 10), weight: SAN.num(it.weight, 0, 1000) };
+      }).filter(Boolean)
+    };
+  }
+  d.sessions = SAN.arr(raw.sessions, 3000).map(sanSession).filter(Boolean);
+  d.runs = SAN.arr(raw.runs, 5000).map(r => {
+    const id = SAN.id(r?.id), date = SAN.date(r?.date), km = SAN.range(r?.km, 0.01, 400), min = SAN.range(r?.min, 0.1, 2000);
+    if (!id || !date || km == null || min == null) return null;
+    return { id, date, km, min, pace: SAN.num(r.pace, 0.1, 59), source: 'manual' };
+  }).filter(Boolean);
+  d.body = SAN.arr(raw.body, 5000).map(b => {
+    const id = SAN.id(b?.id), date = SAN.date(b?.date), value = SAN.range(b?.value, 0, 1000);
+    if (!id || !date || value == null || typeof b.type !== 'string' || !Object.hasOwn(MEASURES, b.type)) return null;
+    return { id, date, type: b.type, value };
+  }).filter(Boolean);
+  d.goals = SAN.arr(raw.goals, 200).map(g => {
+    const id = SAN.id(g?.id), start = SAN.date(g?.start), deadline = SAN.date(g?.deadline);
+    const type = ['strength', 'body', 'run', 'habit'].includes(g?.type) ? g.type : null; if (!id || !type || !start || !deadline) return null;
+    const o = { id, type, start, deadline, title: SAN.str(g.title, 60) };
+    if (type === 'strength') { o.exId = SAN.id(g.exId); o.target = SAN.range(g.target, 0.1, 10000); o.base = SAN.num(g.base, 0, 10000, 0); if (!o.exId || o.target == null) return null; }
+    else if (type === 'body') { o.measure = (typeof g.measure === 'string' && Object.hasOwn(MEASURES, g.measure)) ? g.measure : null; o.target = SAN.range(g.target, 0, 10000); o.base = SAN.range(g.base, 0, 10000); if (!o.measure || o.target == null || o.base == null) return null; }
+    else if (type === 'run') { o.mode = ['total', 'longest', 'time'].includes(g.mode) ? g.mode : null; o.target = SAN.range(g.target, 0.01, 100000); if (!o.mode || o.target == null) return null; if (o.mode === 'time') { o.km = SAN.range(g.km, 0.1, 1000); if (o.km == null) return null; } }
+    else { o.perWeek = Math.round(SAN.num(g.perWeek, 1, 7, 0)); if (!o.perWeek) return null; o.target = o.perWeek; }
+    return o;
+  }).filter(Boolean);
+  d.active = raw.active ? sanSession(raw.active) : null;
+  d.settings = { rest: Math.round(SAN.num(raw.settings?.rest, 10, 600, 90)), lastBackup: SAN.num(raw.settings?.lastBackup, 0, 4e12, 0) };
+  d.profile = { name: SAN.str(raw.profile?.name, 24), share: raw.profile?.share !== false };
+  return d;
+}
+// Datos públicos de otra persona (Arena): solo números acotados y textos cortos.
+function cleanStats(s) {
+  s = s && typeof s === 'object' ? s : {};
+  const n = (v, max = 1e7) => SAN.num(v, 0, max, 0), a8 = v => SAN.arr(v, 8).map(x => SAN.num(x, 0, 1e5, 0));
+  const lifts = Object.create(null); let c = 0;
+  if (s.lifts && typeof s.lifts === 'object' && !Array.isArray(s.lifts)) for (const [k, v] of Object.entries(s.lifts)) {
+    if (c++ >= 60) break; const name = SAN.str(k, 50), w = SAN.num(v, 0, 1000); if (name && w != null && name !== '__proto__') lifts[name] = w;
+  }
+  return { rank: SAN.str(s.rank, 20), tier: SAN.str(s.tier, 6), xp: n(s.xp), prs: n(s.prs, 1e5), streak: n(s.streak, 1e4), sessions30: n(s.sessions30, 1e3), km30: n(s.km30, 1e5),
+    goalsDone: n(s.goalsDone, 1e4), weeks: a8(s.weeks), wkm: a8(s.wkm), lifts, runs: SAN.arr(s.runs, 10).map(cleanRun).filter(Boolean) };
+}
+
 function loadState() {
-  try { const raw = localStorage.getItem(LS_STATE); if (raw) state = Object.assign(emptyState(), JSON.parse(raw)); } catch { /* estado corrupto: se ignora */ }
+  try { const raw = localStorage.getItem(LS_STATE); if (raw) state = sanitizeState(JSON.parse(raw)); } catch { /* estado corrupto: se ignora */ }
 }
 let pushTimer = null;
 function save(touch = true) {
@@ -240,7 +319,7 @@ async function pushRemote() {
     if (error) throw error;
     await pushProfile();
     setSyncBadge('ok');
-  } catch (e) { console.warn('push', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
+  } catch (e) { dbg('push', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
 }
 async function pullRemote() {
   const { data, error } = await sb.from('user_data').select('data').eq('user_id', user.id).maybeSingle();
@@ -253,11 +332,11 @@ async function initialSync() {
   try {
     if (state.owner && state.owner !== user.id) state = emptyState(); // datos locales de otra cuenta
     const remote = await pullRemote();
-    if (remote && (remote.updated || 0) > (state.updated || 0)) {
-      state = Object.assign(emptyState(), remote); state.owner = user.id; save(false);
+    if (remote && SAN.num(remote.updated, 0, 4e12, 0) > (state.updated || 0)) {
+      state = sanitizeState(remote); state.owner = user.id; save(false);
       await pushProfile(); setSyncBadge('ok');
     } else { await pushRemote(); }
-  } catch (e) { console.warn('sync', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
+  } catch (e) { dbg('sync', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
   syncing = false;
 }
 
@@ -311,6 +390,9 @@ V.foro = () => {
   const goals = state.goals.map(g => ({ g, p: goalProgress(g) })).filter(o => o.p.status !== 'cumplida' && o.p.status !== 'vencida').slice(0, 3);
   const quote = LATIN[Math.floor(Date.now() / 864e5) % LATIN.length];
   const active = state.active;
+  const hasData = state.sessions.length + state.runs.length + state.body.length + state.goals.length > 0;
+  const lb = state.settings.lastBackup || 0, bdays = lb ? Math.floor((Date.now() - lb) / 864e5) : null;
+  const backupCard = hasData && (bdays === null || bdays >= 30) ? `<div class="card"><div class="row between"><div class="grow"><h3>Respaldo</h3><div class="muted small">${bdays === null ? 'Todavía no descargaste un respaldo de tus datos.' : `Hace ${bdays} días que no descargás un respaldo.`}</div></div><button data-act="export">Descargar</button></div></div>` : '';
   return `
   <div class="card gold hero">
     <div class="lvls">
@@ -335,7 +417,8 @@ V.foro = () => {
     <div class="card stat"><b>${x.prs}</b><span>Récords</span></div>
   </div>
   <h2>Campañas</h2>
-  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><span class="big">···</span>Sin campañas activas.<br><a href="#/metas" class="gold-t">Fijá tu primer objetivo</a></div>`}`;
+  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><span class="big">···</span>Sin campañas activas.<br><a href="#/metas" class="gold-t">Fijá tu primer objetivo</a></div>`}
+  ${backupCard}`;
 };
 
 function goalTitle(g) {
@@ -574,7 +657,7 @@ V.ajustes = () => `
     <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
     <label class="switch"><input type="checkbox" data-in="pshare" ${state.profile?.share !== false ? 'checked' : ''}> Compartir mi progreso con otros</label></div>` : ''}
   <div class="card"><h3>Descanso entre series</h3><label>Segundos</label><input type="number" inputmode="numeric" min="10" max="600" step="5" data-in="rest" value="${state.settings.rest}"></div>
-  <div class="card"><h3>Respaldo</h3><p class="muted small">Descargá todos tus datos o restaurá un respaldo.</p>
+  <div class="card"><h3>Respaldo</h3><p class="muted small">Descargá todos tus datos o restaurá un respaldo. ${state.settings.lastBackup ? 'Último respaldo: ' + new Date(state.settings.lastBackup).toLocaleDateString('es-AR') + '.' : 'Todavía no descargaste ninguno.'}</p>
     <div class="row wrap"><button data-act="export">Exportar JSON</button><button data-act="import">Importar JSON</button></div>
     <input type="file" id="impfile" accept="application/json" class="hidden"></div>
   <div class="card red"><h3 class="red-t">Zona de peligro</h3><p class="muted small">Borra todos los datos de este dispositivo${user ? ' y de tu cuenta' : ''}. No se puede deshacer.</p>
@@ -629,7 +712,7 @@ async function pushProfile() {
   try {
     const { error } = await sb.from('profiles').upsert({ user_id: user.id, name: profileName(), share: state.profile?.share !== false, stats: buildStats(), updated_at: new Date().toISOString() });
     if (error) throw error;
-  } catch (e) { console.warn('profile', e); }
+  } catch (e) { dbg('profile', e); }
 }
 V.arena = () => `<h1>Arena</h1><p class="sub">Medite tu fuerza contra la de otro gladiador. Cada uno tiene su cuenta y sus datos privados; solo se comparte un resumen.</p>
   <div id="arena"><div class="card empty"><span class="big">···</span>Cargando la arena…</div></div>`;
@@ -643,10 +726,11 @@ async function afterArena() {
     await pushProfile();
     const { data, error } = await sb.from('profiles').select('user_id,name,stats,updated_at').neq('user_id', user.id).eq('share', true);
     if (error) throw error;
-    ui.rivals = data || [];
+    ui.rivals = (data || []).map(r => ({ user_id: /^[0-9a-f-]{36}$/i.test(String(r?.user_id)) ? r.user_id : null, name: SAN.str(r?.name, 24) || 'Gladiador',
+      updated_at: typeof r?.updated_at === 'string' ? r.updated_at.slice(0, 40) : '', stats: cleanStats(r?.stats) })).filter(r => r.user_id);
     if (!ui.rivals.some(r => r.user_id === ui.rivalId)) ui.rivalId = ui.rivals[0]?.user_id || null;
     renderArena();
-  } catch (e) { console.warn(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('No se pudo cargar la arena. Revisá tu conexión.', '<br><br><button data-act="arena-refresh">Reintentar</button>'); }
+  } catch (e) { dbg(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('No se pudo cargar la arena. Revisá tu conexión.', '<br><br><button data-act="arena-refresh">Reintentar</button>'); }
 }
 function rrunsHtml(rv) {
   const runs = (Array.isArray(rv.stats?.runs) ? rv.stats.runs : []).map(cleanRun).filter(Boolean);
@@ -825,7 +909,7 @@ const ACTIONS = {
   ptab: el => { ui.progTab = el.dataset.t; render(true); },
   btype: el => { ui.bodyType = el.dataset.t; render(true); },
   'body-add': () => {
-    const v = num(val('bv')), d = val('bd'); if (v == null || !d) return toast('Completá fecha y valor');
+    const v = num(val('bv')), d = SAN.date(val('bd')); if (v == null || !d) return toast('Completá fecha y valor'); if (v <= 0 || v > 1000) return toast('Revisá el valor: parece incorrecto');
     state.body.push({ id: uid(), date: d, type: ui.bodyType, value: v }); save(); toast('Medida registrada'); render(true);
   },
   'body-del': el => { state.body = state.body.filter(b => b.id !== el.dataset.id); save(); render(true); },
@@ -845,7 +929,7 @@ const ACTIONS = {
       if (g.mode === 'time') { g.km = num(mv('g_km')); const m = num(mv('g_min')) || 0, s = num(mv('g_sec')) || 0; g.target = m + s / 60; if (!g.km || g.target <= 0) return toast('Completá distancia y tiempo'); }
       else g.target = num(mv('g_t'));
     } else { g.perWeek = Math.round(num(mv('g_pw')) || 0); if (g.perWeek < 1 || g.perWeek > 7) return toast('Entre 1 y 7 entrenos por semana'); g.target = g.perWeek; }
-    if (type !== 'habit' && !(g.target > 0)) return toast('Indicá una meta válida');
+    if (type !== 'habit' && !(g.target > 0 && g.target <= 100000)) return toast('Indicá una meta válida');
     state.goals.push(g); save(); closeModal(); toast('Campaña fijada. ¡A conquistar!'); render(true);
   },
 
@@ -860,7 +944,7 @@ const ACTIONS = {
     const km = num(mv('r_k')), min = (num(mv('r_m')) || 0) + (num(mv('r_s')) || 0) / 60, pace = (num(mv('r_pm')) || 0) + (num(mv('r_ps')) || 0) / 60;
     if (!(km > 0) || !(min > 0) || !(pace > 0)) return toast('Completá los 3 datos: kilómetros, duración y ritmo');
     if (km >= 400 || min >= 2000 || pace >= 60 || (num(mv('r_s')) || 0) > 59 || (num(mv('r_ps')) || 0) > 59) return toast('Revisá los valores: parecen incorrectos');
-    state.runs.push({ id: uid(), date: mv('r_d') || today(), km, min: Math.round(min * 100) / 100, pace: Math.round(pace * 1000) / 1000, source: 'manual' });
+    state.runs.push({ id: uid(), date: SAN.date(mv('r_d')) || today(), km, min: Math.round(min * 100) / 100, pace: Math.round(pace * 1000) / 1000, source: 'manual' });
     save(); closeModal(); toast('Carrera registrada'); render(true);
   },
   'run-del': el => { if (confirm('¿Eliminar esta carrera?')) { state.runs = state.runs.filter(r => r.id !== el.dataset.id); save(); render(true); } },
@@ -871,6 +955,7 @@ const ACTIONS = {
   export: () => {
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' }));
     a.download = `imperium-respaldo-${today()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    state.settings.lastBackup = Date.now(); save(); toast('Respaldo descargado'); render(true);
   },
   import: () => $('#impfile').click(),
   wipe: async () => {
@@ -889,21 +974,33 @@ function moveItem(id, dir) {
   if (i < 0 || j < 0 || j >= r.items.length) return;
   [r.items[i], r.items[j]] = [r.items[j], r.items[i]]; save(); render(true);
 }
+const AUTH_LOCK = 'imperium.authlock';
+let authFails = 0;
+function authLockLeft() { try { return Math.max(0, Math.ceil(((+localStorage.getItem(AUTH_LOCK) || 0) - Date.now()) / 1000)); } catch { return 0; } }
+function authFail() { authFails++; if (authFails >= 5) { try { localStorage.setItem(AUTH_LOCK, String(Date.now() + 60000 * Math.min(10, 2 ** (authFails - 5)))); } catch { /* nada */ } } }
 async function authSubmit(isSignup) {
-  const e = val('a_e'), p = val('a_p'), err = $('#a_err');
-  if (!e || !p || p.length < 6) { err.textContent = 'Ingresá un email válido y una contraseña de al menos 6 caracteres.'; return; }
+  const e = (val('a_e') || '').trim(), p = val('a_p') || '', err = $('#a_err'); err.style.color = '';
+  const left = authLockLeft(); if (left) { err.textContent = `Demasiados intentos. Esperá ${left} segundos.`; return; }
+  if (e.length > 254 || !/^[^\s@]{1,64}@[^\s@]+\.[^\s@]{2,}$/.test(e)) { err.textContent = 'Ingresá un email válido.'; return; }
+  if (!p || p.length > 128) { err.textContent = 'Ingresá tu contraseña.'; return; }
+  if (isSignup && !(p.length >= 8 && /[A-Za-z]/.test(p) && /\d/.test(p))) { err.textContent = 'La contraseña debe tener al menos 8 caracteres, con letras y números.'; return; }
   err.textContent = 'Un momento…';
   try {
-    const nm = (val('a_n') || '').trim().slice(0, 24);
+    const nm = SAN.str(val('a_n') || '', 24).trim();
     if (isSignup && nm) state.profile = { ...state.profile, name: nm };
     const { data, error } = isSignup ? await sb.auth.signUp({ email: e, password: p, options: { data: { name: nm } } }) : await sb.auth.signInWithPassword({ email: e, password: p });
     if (error) throw error;
+    authFails = 0; try { localStorage.removeItem(AUTH_LOCK); } catch { /* nada */ }
     if (!data.session) { err.style.color = 'var(--gold-hi)'; err.textContent = 'Cuenta creada. Revisá tu email para confirmarla y luego iniciá sesión.'; return; }
     user = data.session.user; localStorage.removeItem(LS_LOCAL);
     await initialSync(); location.hash = '#/foro'; render();
   } catch (ex) {
-    err.style.color = ''; const m = String(ex.message || ex);
-    err.textContent = /Invalid login/i.test(m) ? 'Email o contraseña incorrectos.' : /already/i.test(m) ? 'Ese email ya tiene cuenta. Iniciá sesión.' : 'Error: ' + m;
+    authFail(); dbg('auth', ex);
+    const m = String(ex?.message || ex);
+    err.textContent = (ex?.status === 429 || /rate limit|too many/i.test(m)) ? 'Demasiados intentos. Esperá unos minutos e intentá de nuevo.'
+      : /signups? (not allowed|disabled)|not allowed/i.test(m) ? 'El registro está cerrado. Pedile al administrador que cree tu cuenta.'
+      : isSignup ? 'No se pudo crear la cuenta. Si ya tenés una, iniciá sesión.'
+      : /invalid login|credentials/i.test(m) ? 'Email o contraseña incorrectos.' : 'No se pudo completar. Revisá tus datos e intentá de nuevo.';
   }
 }
 
@@ -916,16 +1013,16 @@ document.addEventListener('submit', ev => { if (ev.target.id === 'authform') ev.
 document.addEventListener('input', ev => {
   const el = ev.target, k = el.dataset?.in; if (!k) return;
   if (k === 'live') {
-    const s = state.active.entries[+el.dataset.e].sets[+el.dataset.s]; s[el.dataset.f] = num(el.value); save();
+    const s = state.active.entries[+el.dataset.e].sets[+el.dataset.s], f = el.dataset.f; if (f === 'w' || f === 'r') { s[f] = SAN.num(el.value, 0, 1000); save(); }
   } else if (k === 'rt') {
-    const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id); if (it) { it[el.dataset.f] = num(el.value); save(); }
+    const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id), f = el.dataset.f, lim = { sets: [1, 50], reps: [1, 1000], weight: [0, 1000] }[f]; if (it && lim) { it[f] = SAN.num(el.value, lim[0], lim[1]); save(); }
   } else if (k === 'rname') { ensureDay(ui.routineDay).name = el.value.slice(0, 40); save(); }
   else if (k === 'pname') { state.profile = { ...state.profile, name: el.value.slice(0, 24) }; save(); }
   else if (k === 'rest') { const v = num(el.value); if (v >= 10 && v <= 600) { state.settings.rest = Math.round(v); save(); } }
   else if (k === 'pickq') { ui.pick.q = el.value; renderPickList(); }
 });
 document.addEventListener('change', ev => {
-  const el = ev.target, k = el.dataset?.in; if (!k) return;
+  const el = ev.target, k = el.dataset?.in; if (!k && el.id !== 'impfile') return; // (el selector de archivo no usa data-in)
   if (k === 'pshare') { state.profile = { ...state.profile, share: el.checked }; save(); toast(el.checked ? 'Tu progreso es visible en la Arena' : 'Tu progreso ya no es visible'); }
   else if (k === 'startday') { ui.startDay = +el.value; render(true); }
   else if (k === 'progex') { ui.exId = el.value; render(true); }
@@ -938,17 +1035,22 @@ document.addEventListener('change', ev => {
   }
   if (el.id === 'impfile') {
     const f = el.files[0]; if (!f) return;
+    if (f.size > 5e6) { el.value = ''; return toast('El archivo es demasiado grande para ser un respaldo'); }
     f.text().then(t => {
       const d = JSON.parse(t); if (!d || typeof d !== 'object' || !Array.isArray(d.sessions)) throw new Error('formato');
-      if (!confirm('Esto reemplaza tus datos actuales por el respaldo. ¿Continuar?')) return;
-      const owner = state.owner; state = Object.assign(emptyState(), d); state.owner = owner; save(); toast('Respaldo restaurado'); render();
-    }).catch(() => toast('Archivo de respaldo inválido'));
+      const clean = sanitizeState(d);
+      if (!confirm(`El respaldo tiene ${clean.sessions.length} entrenamientos, ${clean.runs.length} carreras y ${clean.goals.length} campañas. Esto reemplaza tus datos actuales. ¿Continuar?`)) return;
+      const owner = state.owner; state = clean; state.owner = owner; save(); toast('Respaldo restaurado'); render();
+    }).catch(() => toast('Archivo de respaldo inválido')).finally(() => { el.value = ''; });
   }
 });
 window.addEventListener('hashchange', () => render());
 $('#rankChip').addEventListener('click', () => { location.hash = '#/foro'; });
 $('#gear').addEventListener('click', () => { location.hash = '#/ajustes'; });
 window.addEventListener('online', () => { if (sb && user) pushRemote(); });
+
+window.addEventListener('error', ev => { dbg('error', ev.message); });
+window.addEventListener('unhandledrejection', ev => { dbg('rechazo', ev.reason); ev.preventDefault(); });
 
 /* ---------- Arranque ---------- */
 async function boot() {

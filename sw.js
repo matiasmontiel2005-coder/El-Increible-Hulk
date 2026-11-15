@@ -1,5 +1,5 @@
-const VERSION = 'imperium-v9';
-const CORE = ['./', 'index.html', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
+const VERSION = 'imperium-v10';
+const CORE = ['./', 'index.html', 'guard.js', 'vendor/fonts/cinzel-latin-500-normal.woff2', 'vendor/fonts/cinzel-latin-700-normal.woff2', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/favicon-48.png', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -17,16 +17,9 @@ self.addEventListener('fetch', e => {
   // Datos en vivo (Supabase): siempre red, nunca caché.
   if (url.hostname.endsWith('supabase.co')) return;
   const sameOrigin = url.origin === location.origin;
-  const isFont = url.hostname.includes('fonts.g');
-  if (!sameOrigin && !isFont) return;
+  if (!sameOrigin) return; // nada de terceros pasa por la caché
   // Archivos propios: red primero (para recibir actualizaciones), caché si no hay conexión.
-  if (sameOrigin) {
-    e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => { // revalida siempre con el servidor
-      const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res;
-    }).catch(() => caches.match(req).then(r => r || caches.match('index.html'))));
-  } else {
-    e.respondWith(caches.match(req).then(r => r || fetch(req).then(res => {
-      const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res;
-    })));
-  }
+  e.respondWith(fetch(req, { cache: 'no-cache' }).then(res => { // revalida siempre con el servidor
+    const copy = res.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return res;
+  }).catch(() => caches.match(req).then(r => r || caches.match('index.html'))));
 });

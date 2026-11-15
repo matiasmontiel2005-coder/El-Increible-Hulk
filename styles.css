@@ -1,3 +1,7 @@
+/* Tipografía incluida en el repositorio (licencia OFL): no se descarga de ningún servicio externo. */
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 500; font-display: swap; src: url("vendor/fonts/cinzel-latin-500-normal.woff2") format("woff2"); }
+@font-face { font-family: "Cinzel"; font-style: normal; font-weight: 700; font-display: swap; src: url("vendor/fonts/cinzel-latin-700-normal.woff2") format("woff2"); }
+
 /* Imperium — versión minimalista. Un solo acento dorado, carmesí solo para la acción principal. */
 :root {
   --bg: #0b0a09;
