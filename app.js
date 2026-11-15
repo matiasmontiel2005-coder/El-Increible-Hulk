@@ -24,6 +24,8 @@ const CATALOG_RAW = {
 const CATALOG = [];
 for (const g of GROUPS) for (const n of CATALOG_RAW[g]) CATALOG.push({ id: 'c:' + n, name: n, group: g });
 
+// Puntos de gloria que suma cada hito (la mitad que antes: subir de nivel cuesta el doble).
+const XP = { sesion: 10, serie: 0.5, km: 1.5, record: 15, campana: 50 };
 const RANKS = [
   { min: 0, name: 'Recluta', icon: '🛡' },
   { min: 150, name: 'Legionario', icon: '⚔' },
@@ -135,7 +137,7 @@ function xpInfo() {
   const km = state.runs.reduce((a, r) => a + (r.km || 0), 0);
   const goalsDone = state.goals.filter(g => goalProgress(g).pct >= 1).length;
   const prs = countPRs();
-  const xp = Math.round(state.sessions.length * 20 + sets + km * 3 + prs * 30 + goalsDone * 100);
+  const xp = Math.round(state.sessions.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
   return { xp, rank: cur, roman: ROMAN[i], nextRoman: ROMAN[i + 1], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
@@ -317,7 +319,7 @@ V.foro = () => {
     </div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
     <div class="glory"><span>${x.xp} pts</span>${x.next ? `<span class="falta">Faltan <b>${x.next.min - x.xp}</b> puntos</span><span>${x.next.min} pts</span>` : '<span class="falta">Alcanzaste el nivel máximo</span><span></span>'}</div>
-    <p class="how">${x.next ? 'Sumás gloria con cada entreno (+20), serie (+1), kilómetro corrido (+3), récord (+30) y campaña cumplida (+100).' : 'Sos un Emperador. Mantené el ritmo.'}</p>
+    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
     <div class="muted small" style="margin-top:12px;font-style:italic">“${quote}”</div>
   </div>
   <h2>Esta semana</h2>
