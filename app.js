@@ -98,14 +98,34 @@ const SAN = {
 };
 function sanSession(x) {
   const id = SAN.id(x?.id), date = SAN.date(x?.date); if (!id || !date) return null;
-  return {
+  const o = {
     id, date, start: SAN.num(x.start, 0, 4e12, 0), name: SAN.str(x.name, 60) || 'Entrenamiento', dur: SAN.num(x.dur, 0, 2000, 0),
     prs: SAN.arr(x.prs, 40).map(SAN.id).filter(Boolean),
     entries: SAN.arr(x.entries, 80).map(e => {
       const exId = SAN.id(e?.exId); if (!exId) return null;
-      return { exId, sets: SAN.arr(e.sets, 100).map(q => ({ w: SAN.num(q?.w, 0, 1000), r: SAN.num(q?.r, 0, 1000), done: q?.done === true })) };
+      const en = {
+        exId, sets: SAN.arr(e.sets, 100).map(q => {
+          const st = { w: SAN.num(q?.w, 0, 1000), r: SAN.num(q?.r, 0, 1000), done: q?.done === true };
+          // n = posición de la serie; tw/tr = meta que tenía la serie al empezar (solo en el entrenamiento en curso)
+          for (const k of ['n', 'tw', 'tr']) { const v = SAN.num(q?.[k], 0, k === 'n' ? 200 : 1000); if (v != null) st[k] = k === 'n' ? Math.round(v) : v; }
+          return st;
+        })
+      };
+      const rid = SAN.id(e.rid); if (rid) en.rid = rid; // ejercicio de la rutina del que viene
+      return en;
     }).filter(Boolean)
   };
+  const day = SAN.num(x.day, 0, 6); if (day != null) o.day = Math.round(day);
+  return o;
+}
+// Series de un ejercicio de la rutina: [{ r: repeticiones, w: peso }]. Convierte el formato viejo (mismo valor en todas).
+function sanSets(it) {
+  if (Array.isArray(it?.sets)) {
+    const out = it.sets.slice(0, 30).map(q => ({ r: SAN.num(q?.r, 1, 1000), w: SAN.num(q?.w, 0, 1000) }));
+    return out.length ? out : [{ r: 10, w: null }];
+  }
+  const n = Math.round(SAN.num(it?.sets, 1, 30, 3)), r = SAN.num(it?.reps, 1, 1000, 10), w = SAN.num(it?.weight, 0, 1000);
+  return Array.from({ length: n }, () => ({ r, w }));
 }
 function sanitizeState(raw) {
   const d = emptyState(); if (!raw || typeof raw !== 'object') return d;
@@ -120,7 +140,7 @@ function sanitizeState(raw) {
       name: SAN.str(r.name, 40),
       items: SAN.arr(r.items, 80).map(it => {
         const id = SAN.id(it?.id), exId = SAN.id(it?.exId); if (!id || !exId) return null;
-        return { id, exId, sets: SAN.num(it.sets, 1, 50, 3), reps: SAN.num(it.reps, 1, 1000, 10), weight: SAN.num(it.weight, 0, 1000) };
+        return { id, exId, sets: sanSets(it) };
       }).filter(Boolean)
     };
   }
@@ -188,6 +208,7 @@ function exHistory(exId) {
       out.push({
         date: s.date, sets,
         best: Math.max(...sets.map(x => x.w)),
+        bestReps: Math.max(...sets.filter(x => x.w === Math.max(...sets.map(y => y.w))).map(x => x.r)), // repeticiones con ese peso
         e1rm: Math.max(...sets.map(x => x.w * (1 + x.r / 30))),
         vol: sets.reduce((a, x) => a + x.w * x.r, 0)
       });
@@ -196,7 +217,14 @@ function exHistory(exId) {
   return out;
 }
 const bestWeight = exId => { const h = exHistory(exId); return h.length ? Math.max(...h.map(x => x.best)) : 0; };
-const lastSets = exId => { const h = exHistory(exId); return h.length ? h[h.length - 1].sets : null; };
+const lastEntry = exId => { const h = exHistory(exId); return h.length ? h[h.length - 1] : null; };   // último entrenamiento del ejercicio
+const lastSets = exId => lastEntry(exId)?.sets || null;
+// Marca de la vez anterior para la serie número i (usa la posición guardada; en datos viejos, el orden)
+function prevSet(le, i) {
+  if (!le) return null;
+  const byN = le.sets.find(q => q.n === i); if (byN) return byN;
+  return le.sets.every(q => q.n == null) ? (le.sets[i] || null) : null;
+}
 
 function countPRs() {
   const max = {}; let n = 0;
@@ -459,11 +487,12 @@ V.rutina = () => {
       <div class="row"><button class="btn-sm icon-btn" data-act="rup" data-id="${it.id}" ${i === 0 ? 'disabled' : ''}>↑</button>
       <button class="btn-sm icon-btn" data-act="rdown" data-id="${it.id}" ${i === r.items.length - 1 ? 'disabled' : ''}>↓</button>
       <button class="btn-sm icon-btn btn-danger" data-act="rdel" data-id="${it.id}">✕</button></div></div>
-    <div class="grid3">
-      <div><label>Series</label><input type="number" inputmode="numeric" min="1" data-in="rt" data-id="${it.id}" data-f="sets" value="${it.sets ?? ''}"></div>
-      <div><label>Reps</label><input type="number" inputmode="numeric" min="1" data-in="rt" data-id="${it.id}" data-f="reps" value="${it.reps ?? ''}"></div>
-      <div><label>Peso (kg)</label><input type="number" inputmode="decimal" min="0" step="0.5" data-in="rt" data-id="${it.id}" data-f="weight" value="${it.weight ?? ''}"></div>
-    </div>
+    <div class="sets-head"><span>Serie</span><span>Reps</span><span>Peso (kg)</span></div>
+    ${it.sets.map((t, si) => `<div class="srow"><span class="n">${si + 1}</span>
+      <input type="number" inputmode="numeric" min="1" max="1000" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="r" value="${t.r ?? ''}" placeholder="reps" aria-label="Repeticiones de la serie ${si + 1}">
+      <input type="number" inputmode="decimal" min="0" max="1000" step="0.5" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="w" value="${t.w ?? ''}" placeholder="kg" aria-label="Peso de la serie ${si + 1}"></div>`).join('')}
+    <div class="row" style="margin-top:4px"><button class="btn-sm" data-act="rset-add" data-id="${it.id}" ${it.sets.length >= 20 ? 'disabled' : ''}>+ Serie</button>
+      <button class="btn-sm btn-ghost" data-act="rset-del" data-id="${it.id}" ${it.sets.length <= 1 ? 'disabled' : ''}>− Serie</button></div>
   </div>`).join('') : `<div class="card empty"><span class="big">···</span>${DAYS[d]} está vacío.<br>Agregá ejercicios o dejalo como día de descanso.</div>`}
   <button class="btn-primary btn-block" data-act="radd">+ Añadir ejercicio</button>
   ${r.items.length ? `<button class="btn-block" style="margin-top:10px" data-act="start-day" data-day="${d}">Entrenar este día ahora</button>
@@ -500,16 +529,23 @@ function liveView() {
   <div class="row between"><div><h1>${esc(a.name)}</h1><p class="sub" style="margin:0">${fmtD(a.date)} · empezó ${new Date(a.start).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
   <div style="height:12px"></div>
   ${a.entries.map((e, ei) => {
-    const last = lastSets(e.exId);
+    const le = lastEntry(e.exId);
     return `<div class="card ex-card">
       <div class="row between"><h3>${esc(exName(e.exId))}</h3><button class="btn-sm icon-btn btn-danger" data-act="live-exdel" data-e="${ei}">✕</button></div>
-      <p class="hint">${last ? 'Última vez: ' + last.map(s => `${fmtN(s.w)}kg×${s.r}`).join(' · ') : 'Primera vez con este ejercicio'}</p>
-      <div class="set-head"><span>#</span><span>Kg</span><span>Reps</span><span></span></div>
-      ${e.sets.map((s, si) => `<div class="set ${s.done ? 'done' : ''}">
+      <p class="hint">${le ? 'Última vez: ' + fmtD(le.date) : 'Primera vez con este ejercicio'}${e.rid ? ' · la meta sube sola cuando la superás' : ''}</p>
+      <div class="set-head"><span>#</span><span>Reps</span><span>Kg</span><span></span></div>
+      ${e.sets.map((s, si) => {
+        const pv = prevSet(le, si);
+        const meta = s.tw != null ? `Meta <b>${s.tr != null ? fmtN(s.tr) + ' × ' : ''}${fmtN(s.tw)} kg</b>` : '';
+        const ant = pv ? `Anterior ${fmtN(pv.r)} × ${fmtN(pv.w)} kg` : 'Sin marca anterior';
+        const beat = s.done && s.w != null && s.r != null && s.tw != null && (s.w > s.tw || (s.w === s.tw && s.r > (s.tr ?? 0)));
+        return `<div class="setwrap"><div class="set ${s.done ? 'done' : ''}">
         <span class="n">${si + 1}</span>
-        <input type="number" inputmode="decimal" step="0.5" min="0" data-in="live" data-e="${ei}" data-s="${si}" data-f="w" value="${s.w ?? ''}" placeholder="kg">
-        <input type="number" inputmode="numeric" min="0" data-in="live" data-e="${ei}" data-s="${si}" data-f="r" value="${s.r ?? ''}" placeholder="reps">
-        <button class="ok" data-act="live-done" data-e="${ei}" data-s="${si}" aria-label="Serie hecha">✔</button></div>`).join('')}
+        <input type="number" inputmode="numeric" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="r" value="${s.r ?? ''}" placeholder="reps" aria-label="Repeticiones realizadas, serie ${si + 1}">
+        <input type="number" inputmode="decimal" step="0.5" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="w" value="${s.w ?? ''}" placeholder="kg" aria-label="Peso realizado, serie ${si + 1}">
+        <button class="ok" data-act="live-done" data-e="${ei}" data-s="${si}" aria-label="Serie hecha">✔</button></div>
+        <div class="sethint">${meta ? `<span class="meta">${meta}</span>` : ''}<span>${ant}</span>${beat ? '<span class="up">↑ Superaste la meta</span>' : ''}</div></div>`;
+      }).join('')}
       <div class="row" style="margin-top:8px"><button class="btn-sm" data-act="live-addset" data-e="${ei}">+ Serie</button>
       <button class="btn-sm btn-ghost" data-act="live-delset" data-e="${ei}">− Serie</button></div>
     </div>`;
@@ -531,18 +567,20 @@ V.prog_fuerza = () => {
   if (!ui.exId || !withHist.some(e => e.id === ui.exId)) ui.exId = withHist[0].id;
   const h = exHistory(ui.exId);
   const best = Math.max(...h.map(x => x.best));
+  const bestRepsAtMax = Math.max(...h.filter(x => x.best === best).map(x => x.bestReps)); // repeticiones con el peso máximo
   const first = h[0].best;
   return `
   <select data-in="progex">${withHist.map(e => `<option value="${e.id}" ${e.id === ui.exId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>
-  <div class="grid3" style="margin-top:12px">
-    <div class="card stat"><b>${fmtN(best)}</b><span>Mejor kg</span></div>
+  <div class="grid2" style="margin-top:12px">
+    <div class="card stat"><b>${fmtN(best)}</b><span>Peso máximo (kg)</span></div>
+    <div class="card stat"><b>${bestRepsAtMax}</b><span>Reps con ese peso</span></div>
     <div class="card stat"><b>${h.length}</b><span>Sesiones</span></div>
     <div class="card stat"><b class="${best >= first ? 'ok-t' : ''}">${best - first >= 0 ? '+' : ''}${fmtN(best - first)}</b><span>Desde el inicio</span></div>
   </div>
-  <div class="card"><h3>Peso máximo y 1RM estimado</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><h3>Peso máximo, repeticiones con ese peso y 1RM estimado</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Volumen por sesión (kg × reps)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>
   <div class="card"><h3>Registro</h3>${h.slice().reverse().slice(0, 10).map(x => `<div class="list-item"><div class="grow"><b>${fmtD(x.date)}</b>
-    <div class="muted small">${x.sets.map(s => `${fmtN(s.w)}×${s.r}`).join(' · ')}</div></div><span class="tag gold">${fmtN(x.best)} kg</span></div>`).join('')}</div>`;
+    <div class="muted small">${x.sets.map(s => `${s.r} × ${fmtN(s.w)} kg`).join(' · ')}</div></div><span class="tag gold">${x.bestReps} × ${fmtN(x.best)} kg</span></div>`).join('')}</div>`;
 };
 V.prog_cuerpo = () => {
   const chips = Object.entries(MEASURES).map(([k, m]) => `<button class="chip ${ui.bodyType === k ? 'on' : ''}" data-act="btype" data-t="${k}">${m.name}</button>`).join('');
@@ -575,7 +613,7 @@ function afterProgreso() {
   if (ui.progTab === 'fuerza' && ui.exId) {
     const h = exHistory(ui.exId); if (!h.length) return;
     const labels = h.map(x => fmtD(x.date));
-    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } } }) });
+    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), { ...lineDs('Reps con ese peso', h.map(x => x.bestReps), '#FFFFFF', false), yAxisID: 'y2', borderDash: [5, 4] }, lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { grid: { color: '#2e2e2e' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: false }, y2: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }) });
     drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RUST, borderColor: ORANGE, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
   } else if (ui.progTab === 'cuerpo') {
     const list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date));
@@ -813,11 +851,29 @@ function ensureDay(d) { return state.routine[d] || (state.routine[d] = { name: '
 function sessionFromDay(d) {
   const r = state.routine[d];
   const entries = (r?.items || []).map(it => {
-    const last = lastSets(it.exId);
-    const n = Math.max(1, it.sets || 3);
-    return { exId: it.exId, sets: Array.from({ length: n }, (_, i) => ({ w: it.weight || last?.[i]?.w || last?.[0]?.w || null, r: it.reps || last?.[i]?.r || null, done: false })) };
+    const le = lastEntry(it.exId);
+    return {
+      exId: it.exId, rid: it.id,
+      sets: it.sets.map((t, i) => {
+        const pv = prevSet(le, i);   // si la meta no tiene un dato, se completa con lo de la vez anterior
+        return { r: t.r ?? pv?.r ?? null, w: t.w ?? pv?.w ?? null, done: false, tr: t.r ?? undefined, tw: t.w ?? undefined };
+      }).map(q => { Object.keys(q).forEach(k => q[k] === undefined && delete q[k]); return q; })
+    };
   });
-  return { id: uid(), date: today(), start: Date.now(), name: r?.name || DAYS[d], entries };
+  return { id: uid(), date: today(), start: Date.now(), name: r?.name || DAYS[d], day: d, entries };
+}
+// Al terminar: las metas de la rutina SUBEN donde superaste la marca (más peso, o el mismo peso con más reps). Nunca bajan solas.
+function applyRoutineProgress(a) {
+  const items = Object.values(state.routine).flatMap(r => r.items || []); let n = 0;
+  for (const e of a.entries) {
+    const item = e.rid && items.find(i => i.id === e.rid); if (!item) continue;
+    e.sets.forEach((q, i) => {
+      const t = item.sets[i]; if (!t || !q.done || q.w == null || q.r == null) return;
+      const mejor = t.w == null || q.w > t.w || (q.w === t.w && (t.r == null || q.r > t.r));
+      if (mejor && (t.w !== q.w || t.r !== q.r)) { t.w = q.w; t.r = q.r; n++; }
+    });
+  }
+  return n;
 }
 function pickExercise(cb) {
   ui.pick = { cb, q: '', g: 'Todos' };
@@ -840,7 +896,7 @@ function renderPickList() {
 
 async function finishSession() {
   const a = state.active;
-  const entries = a.entries.map(e => ({ exId: e.exId, sets: e.sets.filter(s => s.done).map(s => ({ w: s.w, r: s.r, done: true })) })).filter(e => e.sets.length);
+  const entries = a.entries.map(e => ({ exId: e.exId, sets: e.sets.map((s, n) => ({ s, n })).filter(o => o.s.done).map(o => ({ w: o.s.w, r: o.s.r, done: true, n: o.n })) })).filter(e => e.sets.length);
   if (!entries.length) return toast('Marcá al menos una serie como hecha (✔)');
   const prs = [];
   for (const e of entries) {
@@ -849,10 +905,12 @@ async function finishSession() {
     if (w > 0 && prev > 0 && w > prev) prs.push(e.exId);
   }
   state.sessions.push({ id: a.id, date: a.date, start: a.start, name: a.name, entries, prs, dur: Math.max(1, Math.round((Date.now() - a.start) / 60000)) });
+  const subidas = applyRoutineProgress(a);
   state.active = null; stopRest(); save();
   location.hash = '#/progreso'; ui.progTab = 'fuerza'; if (entries[0]) ui.exId = entries[0].exId;
   render();
-  toast(prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. ¡Ave!', 4000);
+  const msg = prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. ¡Ave!';
+  toast(subidas ? `${msg} Subieron las metas de ${subidas} serie${subidas === 1 ? '' : 's'} en tu rutina.` : msg, 5200);
 }
 
 const ACTIONS = {
@@ -862,11 +920,17 @@ const ACTIONS = {
 
   // rutina
   rday: el => { ui.routineDay = +el.dataset.day; render(true); },
-  radd: () => pickExercise(id => { const r = ensureDay(ui.routineDay); const last = lastSets(id)?.[0]; r.items.push({ id: uid(), exId: id, sets: 3, reps: 10, weight: last?.w || null }); save(); render(true); }),
+  radd: () => pickExercise(id => {
+    const r = ensureDay(ui.routineDay), le = lastEntry(id);
+    const sets = le ? le.sets.slice(0, 10).map(q => ({ r: q.r, w: q.w })) : [{ r: 10, w: null }, { r: 10, w: null }, { r: 10, w: null }];
+    r.items.push({ id: uid(), exId: id, sets }); save(); render(true);
+  }),
+  'rset-add': el => { const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id); if (!it || it.sets.length >= 20) return; const l = it.sets[it.sets.length - 1]; it.sets.push({ r: l?.r ?? 10, w: l?.w ?? null }); save(); render(true); },
+  'rset-del': el => { const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id); if (!it || it.sets.length <= 1) return; it.sets.pop(); save(); render(true); },
   rdel: el => { const r = ensureDay(ui.routineDay); r.items = r.items.filter(i => i.id !== el.dataset.id); save(); render(true); },
   rup: el => moveItem(el.dataset.id, -1), rdown: el => moveItem(el.dataset.id, 1),
   rcopy: () => openModal(`<h2 style="margin-top:0">Copiar ${DAYS[ui.routineDay]} a…</h2><div class="chips" style="flex-wrap:wrap">${DAYS.map((n, i) => i === ui.routineDay ? '' : `<button class="chip" data-act="rcopy-to" data-day="${i}">${n}</button>`).join('')}</div><p class="muted small">Reemplaza el contenido del día elegido.</p>`),
-  'rcopy-to': el => { const src = ensureDay(ui.routineDay); state.routine[+el.dataset.day] = { name: src.name, items: src.items.map(i => ({ ...i, id: uid() })) }; save(); closeModal(); toast('Día copiado'); render(true); },
+  'rcopy-to': el => { const src = ensureDay(ui.routineDay); state.routine[+el.dataset.day] = { name: src.name, items: src.items.map(i => ({ ...i, id: uid(), sets: i.sets.map(t => ({ ...t })) })) }; save(); closeModal(); toast('Día copiado'); render(true); },
 
   // entrenar
   'start-day': el => {
@@ -1016,7 +1080,8 @@ document.addEventListener('input', ev => {
   if (k === 'live') {
     const s = state.active.entries[+el.dataset.e].sets[+el.dataset.s], f = el.dataset.f; if (f === 'w' || f === 'r') { s[f] = SAN.num(el.value, 0, 1000); save(); }
   } else if (k === 'rt') {
-    const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id), f = el.dataset.f, lim = { sets: [1, 50], reps: [1, 1000], weight: [0, 1000] }[f]; if (it && lim) { it[f] = SAN.num(el.value, lim[0], lim[1]); save(); }
+    const it = ensureDay(ui.routineDay).items.find(i => i.id === el.dataset.id), t = it?.sets?.[+el.dataset.s], f = el.dataset.f;
+    if (t && (f === 'r' || f === 'w')) { t[f] = f === 'r' ? SAN.num(el.value, 1, 1000) : SAN.num(el.value, 0, 1000); save(); }
   } else if (k === 'rname') { ensureDay(ui.routineDay).name = el.value.slice(0, 40); save(); }
   else if (k === 'pname') { state.profile = { ...state.profile, name: el.value.slice(0, 24) }; save(); }
   else if (k === 'rest') { const v = num(el.value); if (v >= 10 && v <= 600) { state.settings.rest = Math.round(v); save(); } }

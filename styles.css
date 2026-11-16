@@ -151,6 +151,18 @@ input[type=checkbox] { width: auto; accent-color: var(--accent); }
 .set.done .ok { background: var(--done); color: #111111; border-color: var(--done); }
 .set .ok.pop { animation: pop .45s var(--ease); }
 @keyframes pop { 0% { transform: scale(.7); } 55% { transform: scale(1.18); } 100% { transform: scale(1); } }
+/* Series con su propia meta */
+.sets-head, .srow { display: grid; grid-template-columns: 34px 1fr 1fr; gap: 8px; align-items: center; }
+.sets-head { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; text-align: center; margin: 14px 0 6px; }
+.srow { margin-bottom: 8px; }
+.srow .n { color: var(--muted); font-family: var(--serif); text-align: center; font-size: 12px; }
+.srow input { text-align: center; padding: 9px 4px; }
+.setwrap { margin-bottom: 12px; }
+.setwrap .set { margin-bottom: 5px; }
+.sethint { display: flex; flex-wrap: wrap; gap: 2px 12px; margin: 0 0 0 34px; font-size: 12px; color: var(--muted); }
+.sethint .meta { color: var(--text); }
+.sethint .meta b { color: var(--accent); font-weight: 600; }
+.sethint .up { color: var(--accent); font-weight: 600; }
 .set-head { display: grid; grid-template-columns: 26px 1fr 1fr 46px; gap: 8px; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .14em; text-align: center; margin-bottom: 6px; }
 .hint { font-size: 12px; color: var(--muted); margin: 6px 0 12px; }
 .pr { display: inline-block; font-size: 10px; font-family: var(--serif); color: var(--bg); background: var(--accent); padding: 2px 8px; border-radius: 999px; margin-left: 8px; letter-spacing: .1em; vertical-align: middle; }

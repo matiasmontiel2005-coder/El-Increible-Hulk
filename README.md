@@ -3,9 +3,9 @@
 App web instalable (PWA) de entrenamiento con estética de imperio romano: rutinas semanales, registro de series en vivo, gráficos de progreso, carreras con registro manual y objetivos con meta y fecha límite. Solo modo oscuro, en español, kg y km.
 
 ## Qué incluye
-- **Rutina**: días de la semana, catálogo de ejercicios por grupo muscular (+ ejercicios propios), series, reps y peso objetivo.
-- **Entrenar**: registro en vivo serie a serie, referencia de la última vez, temporizador de descanso, detección de récords (PR).
-- **Progreso**: peso máximo y 1RM estimado por ejercicio, volumen, medidas corporales, constancia semanal.
+- **Rutina**: días de la semana, catálogo de ejercicios por grupo muscular (+ ejercicios propios); cada serie tiene sus propias **repeticiones y peso** (por ejemplo 12 × 60 kg, 10 × 70 kg, 8 × 80 kg).
+- **Entrenar**: registro en vivo serie a serie; cada serie muestra su **meta** y la **marca de la vez anterior**, y vos registrás lo que realmente hiciste. Si superás la meta de una serie (más peso, o el mismo peso con más repeticiones), la meta de tu rutina **sube sola**; nunca baja sola, así se conserva tu máximo. Temporizador de descanso y detección de récords (PR).
+- **Progreso**: peso máximo, repeticiones con ese peso y 1RM estimado por ejercicio, volumen, medidas corporales, constancia semanal.
 - **Correr**: cada carrera se registra a mano con tres datos: **kilómetros, duración y ritmo promedio por km**. Gráficos de km por semana y de ritmo. Es igual en Android y iPhone.
 - **Metas**: fuerza, cuerpo, running y constancia, con barra de progreso y estado (en ritmo / atrasada / cumplida).
 - **Arena**: cada persona tiene su propia cuenta y sus datos privados; la Arena muestra un duelo cara a cara (gloria, sesiones, km, récords, constancia, campañas), gráficos semanales, las últimas carreras del rival (kilómetros, duración y ritmo), cargas máximas en común y una clasificación.
