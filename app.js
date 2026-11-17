@@ -532,6 +532,7 @@ function liveMin(a) {
   }
   return ui.min;
 }
+const fmtRest = n => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
 function liveView() {
   const a = state.active, mn = liveMin(a);
   return `
@@ -544,21 +545,23 @@ function liveView() {
     return `<div class="card ex-card">
       <div class="row between"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="true"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev open" aria-hidden="true"></i></button><button class="btn-sm icon-btn btn-danger" data-act="live-exdel" data-e="${ei}">✕</button></div>
       <p class="hint">${le ? 'Última vez: ' + fmtD(le.date) : 'Primera vez con este ejercicio'}${e.rid ? ' · la meta sube sola cuando la superás' : ''}</p>
-      <div class="set-head"><span>#</span><span>Reps</span><span>Kg</span><span></span></div>
+      <div class="set-head"><span>Serie</span><span>Anterior</span><span>Kg</span><span>Reps</span><span></span></div>
       ${e.sets.map((s, si) => {
         const pv = prevSet(le, si);
         const meta = s.tw != null ? `Meta <b>${s.tr != null ? fmtN(s.tr) + ' × ' : ''}${fmtN(s.tw)} kg</b>` : '';
-        const ant = pv ? `Anterior ${fmtN(pv.r)} × ${fmtN(pv.w)} kg` : 'Sin marca anterior';
+        const ant = pv ? `${fmtN(pv.w)} kg × ${fmtN(pv.r)}` : '—';
         const beat = s.done && s.w != null && s.r != null && s.tw != null && (s.w > s.tw || (s.w === s.tw && s.r > (s.tr ?? 0)));
-        return `<div class="setwrap"><div class="set ${s.done ? 'done' : ''}">
+        return `<div class="setwrap ${s.done ? 'done' : ''}"><div class="set ${s.done ? 'done' : ''}">
         <span class="n">${si + 1}</span>
-        <input type="number" inputmode="numeric" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="r" value="${s.r ?? ''}" placeholder="reps" aria-label="Repeticiones realizadas, serie ${si + 1}">
+        <span class="prev">${ant}</span>
         <input type="number" inputmode="decimal" step="0.5" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="w" value="${s.w ?? ''}" placeholder="kg" aria-label="Peso realizado, serie ${si + 1}">
+        <input type="number" inputmode="numeric" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="r" value="${s.r ?? ''}" placeholder="reps" aria-label="Repeticiones realizadas, serie ${si + 1}">
         <button class="ok" data-act="live-done" data-e="${ei}" data-s="${si}" aria-label="Serie hecha">✔</button></div>
-        <div class="sethint">${meta ? `<span class="meta">${meta}</span>` : ''}<span>${ant}</span>${beat ? '<span class="up">↑ Superaste la meta</span>' : ''}</div></div>`;
+        ${meta || beat ? `<div class="sethint">${meta ? `<span class="meta">${meta}</span>` : ''}${beat ? '<span class="up">↑ Superaste la meta</span>' : ''}</div>` : ''}
+        <div class="restline" aria-hidden="true"><i></i><span>${fmtRest(state.settings.rest || 90)}</span><i></i></div></div>`;
       }).join('')}
-      <div class="row" style="margin-top:8px"><button class="btn-sm" data-act="live-addset" data-e="${ei}">+ Serie</button>
-      <button class="btn-sm btn-ghost" data-act="live-delset" data-e="${ei}">− Serie</button></div>
+      <div class="addrow"><button class="addset" data-act="live-addset" data-e="${ei}">+ Añadir serie (${fmtRest(state.settings.rest || 90)})</button>
+      <button class="btn-sm btn-ghost" data-act="live-delset" data-e="${ei}" aria-label="Quitar la última serie">− Serie</button></div>
     </div>`;
   }).join('')}
   <button class="btn-block" data-act="live-addex">+ Añadir ejercicio</button>

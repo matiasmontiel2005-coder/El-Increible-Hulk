@@ -292,3 +292,23 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .ex-card.min { padding-top: 12px; padding-bottom: 12px; margin-bottom: 8px; }
 .ex-card.min.all .prog { color: var(--hi); }
 @media (prefers-reduced-motion: reduce) { .ex-toggle .chev { transition: none; } }
+
+/* Registro de series en formato tabla */
+.set-head, .set { grid-template-columns: 34px 1fr 64px 64px 42px; gap: 6px; }
+.set-head { margin: 4px 0 2px; }
+.setwrap { margin-bottom: 0; }
+.setwrap .set { margin: 0; padding: 4px 0; border-radius: 10px; }
+.setwrap.done .set { background: rgba(255,255,255,.06); }
+.set .n { font-size: 15px; color: var(--text); }
+.set .prev { text-align: center; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.set input { background: transparent; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; font-size: 17px; font-weight: 600; padding: 8px 0; min-width: 0; }
+.set input:focus { outline: none; border-bottom-color: var(--accent); box-shadow: none; }
+.set.done input { border-color: transparent; }
+.set .ok { width: 100%; min-height: 36px; padding: 0; background: transparent; border-color: var(--line); }
+.sethint { margin: 0 0 2px 40px; }
+.restline { display: flex; align-items: center; gap: 10px; margin: 2px 0 4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.restline i { flex: 1; height: 1px; background: var(--line); }
+.setwrap.done .restline { color: var(--accent); }
+.setwrap.done .restline i { background: color-mix(in srgb, var(--accent) 45%, transparent); }
+.addrow { display: flex; gap: 8px; margin-top: 10px; }
+.addset { flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--text); font-weight: 600; padding: 10px; border-radius: 10px; }
