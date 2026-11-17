@@ -84,7 +84,7 @@ const emptyState = () => ({
   active: null, settings: { rest: 90 }
 });
 let state = emptyState();
-const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', exId: null, bodyType: 'peso', startDay: null };
+const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', exId: null, bodyType: 'peso', startDay: null, min: null };
 
 /* ---------- Saneado de datos: todo lo que viene de afuera (respaldo, nube, otra cuenta) se valida y se acota ---------- */
 const SAN = {
@@ -523,15 +523,26 @@ function startView() {
       <button class="btn-sm icon-btn btn-danger" data-act="sess-del" data-id="${s.id}">✕</button></div>`;
   }).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Aún no hay batallas registradas.</div>`}`;
 }
+// Ejercicios minimizados en la sesión en curso: por defecto queda abierto solo el primero sin terminar.
+function liveMin(a) {
+  if (!ui.min || ui.minId !== a.id) {
+    const open = a.entries.findIndex(e => !e.sets.every(s => s.done));
+    ui.min = {}; ui.minId = a.id;
+    a.entries.forEach((_, i) => { if (i !== Math.max(0, open)) ui.min[i] = true; });
+  }
+  return ui.min;
+}
 function liveView() {
-  const a = state.active;
+  const a = state.active, mn = liveMin(a);
   return `
   <div class="row between"><div><h1>${esc(a.name)}</h1><p class="sub" style="margin:0">${fmtD(a.date)} · empezó ${new Date(a.start).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
   <div style="height:12px"></div>
+  ${a.entries.length > 1 ? `<div class="row" style="justify-content:flex-end;margin:-4px 0 10px"><button class="btn-sm btn-ghost" data-act="live-toggleall">${a.entries.every((_, i) => mn[i]) ? 'Expandir todos' : 'Minimizar todos'}</button></div>` : ''}
   ${a.entries.map((e, ei) => {
-    const le = lastEntry(e.exId);
+    const le = lastEntry(e.exId), min = !!mn[ei], dn = e.sets.filter(s => s.done).length;
+    if (min) return `<div class="card ex-card min ${dn === e.sets.length ? 'all' : ''}"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="false"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev" aria-hidden="true"></i></button></div>`;
     return `<div class="card ex-card">
-      <div class="row between"><h3>${esc(exName(e.exId))}</h3><button class="btn-sm icon-btn btn-danger" data-act="live-exdel" data-e="${ei}">✕</button></div>
+      <div class="row between"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="true"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev open" aria-hidden="true"></i></button><button class="btn-sm icon-btn btn-danger" data-act="live-exdel" data-e="${ei}">✕</button></div>
       <p class="hint">${le ? 'Última vez: ' + fmtD(le.date) : 'Primera vez con este ejercicio'}${e.rid ? ' · la meta sube sola cuando la superás' : ''}</p>
       <div class="set-head"><span>#</span><span>Reps</span><span>Kg</span><span></span></div>
       ${e.sets.map((s, si) => {
@@ -935,11 +946,11 @@ const ACTIONS = {
   // entrenar
   'start-day': el => {
     if (state.active && !confirm('Ya tenés un entrenamiento en curso. ¿Reemplazarlo?')) return;
-    const d = +el.dataset.day; state.active = sessionFromDay(d); save();
+    const d = +el.dataset.day; state.active = sessionFromDay(d); ui.min = null; save();
     if (!state.active.entries.length) toast('Ese día no tiene ejercicios: agregalos sobre la marcha');
     location.hash = '#/entrenar'; render();
   },
-  'start-free': () => { state.active = { id: uid(), date: today(), start: Date.now(), name: 'Entrenamiento libre', entries: [] }; save(); render(); },
+  'start-free': () => { state.active = { id: uid(), date: today(), start: Date.now(), name: 'Entrenamiento libre', entries: [] }; ui.min = null; save(); render(); },
   'live-done': el => {
     const s = state.active.entries[+el.dataset.e].sets[+el.dataset.s];
     if (!s.done && (s.w == null || s.r == null)) return toast('Completá kg y reps antes de marcar la serie');
@@ -949,8 +960,10 @@ const ACTIONS = {
   },
   'live-addset': el => { const e = state.active.entries[+el.dataset.e]; const l = e.sets[e.sets.length - 1]; e.sets.push({ w: l?.w ?? null, r: l?.r ?? null, done: false }); save(); render(true); },
   'live-delset': el => { const e = state.active.entries[+el.dataset.e]; if (e.sets.length > 1) { e.sets.pop(); save(); render(true); } },
-  'live-exdel': el => { if (confirm('¿Quitar este ejercicio de la sesión?')) { state.active.entries.splice(+el.dataset.e, 1); save(); render(true); } },
-  'live-addex': () => pickExercise(id => { const l = lastSets(id); state.active.entries.push({ exId: id, sets: Array.from({ length: 3 }, (_, i) => ({ w: l?.[i]?.w ?? l?.[0]?.w ?? null, r: l?.[i]?.r ?? null, done: false })) }); save(); render(true); }),
+  'live-toggle': el => { const m = liveMin(state.active), i = +el.dataset.e; m[i] = !m[i]; render(true); },
+  'live-toggleall': () => { const a = state.active, m = liveMin(a), all = a.entries.every((_, i) => m[i]); a.entries.forEach((_, i) => { m[i] = !all; }); render(true); },
+  'live-exdel': el => { if (confirm('¿Quitar este ejercicio de la sesión?')) { const i = +el.dataset.e, m = liveMin(state.active), n = {}; Object.keys(m).forEach(k => { k = +k; if (k < i) n[k] = m[k]; else if (k > i) n[k - 1] = m[k]; }); ui.min = n; state.active.entries.splice(i, 1); save(); render(true); } },
+  'live-addex': () => pickExercise(id => { const l = lastSets(id); state.active.entries.push({ exId: id, sets: Array.from({ length: 3 }, (_, i) => ({ w: l?.[i]?.w ?? l?.[0]?.w ?? null, r: l?.[i]?.r ?? null, done: false })) }); ui.min && (ui.min[state.active.entries.length - 1] = false); save(); render(true); }),
   'live-finish': finishSession,
   'live-cancel': () => { if (confirm('¿Descartar el entrenamiento en curso?')) { state.active = null; stopRest(); save(); render(); } },
   'sess-del': el => { if (confirm('¿Eliminar esta sesión del historial?')) { state.sessions = state.sessions.filter(s => s.id !== el.dataset.id); save(); render(true); } },

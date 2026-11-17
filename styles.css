@@ -281,3 +281,14 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
   #view .rv { opacity: 1 !important; transform: none !important; filter: none !important; }
 }
+
+/* Ejercicios minimizables durante el entrenamiento */
+.ex-toggle { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; cursor: pointer; padding: 2px 0; -webkit-tap-highlight-color: transparent; }
+.ex-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+.ex-toggle h3 { margin: 0; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ex-toggle .prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ex-toggle .chev { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .25s; margin: 0 4px 0 2px; flex: none; }
+.ex-toggle .chev.open { transform: rotate(45deg); }
+.ex-card.min { padding-top: 12px; padding-bottom: 12px; margin-bottom: 8px; }
+.ex-card.min.all .prog { color: var(--hi); }
+@media (prefers-reduced-motion: reduce) { .ex-toggle .chev { transition: none; } }
