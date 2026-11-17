@@ -312,3 +312,7 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .setwrap.done .restline i { background: color-mix(in srgb, var(--accent) 45%, transparent); }
 .addrow { display: flex; gap: 8px; margin-top: 10px; }
 .addset { flex: 1; background: var(--panel2); border: 1px solid var(--line); color: var(--text); font-weight: 600; padding: 10px; border-radius: 10px; }
+/* Encabezados y valores de Kg/Reps alineados al centro de su columna */
+.set-head span { text-indent: .14em; } /* compensa el espacio que deja el letter-spacing tras la última letra */
+.set input[type=number] { text-align: center; -webkit-appearance: none; appearance: textfield; -moz-appearance: textfield; padding-left: 0; padding-right: 0; }
+.set input[type=number]::-webkit-inner-spin-button, .set input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
