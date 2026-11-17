@@ -533,6 +533,15 @@ function liveMin(a) {
   return ui.min;
 }
 const fmtRest = n => Math.floor(n / 60) + ':' + String(n % 60).padStart(2, '0');
+function paintMin() {
+  const m = ui.min || {}, a = state.active; if (!a) return;
+  document.querySelectorAll('.ex-card[data-ei]').forEach(c => {
+    const mi = !!m[+c.dataset.ei]; c.classList.toggle('min', mi);
+    const t = c.querySelector('.ex-toggle'); if (t) t.setAttribute('aria-expanded', String(!mi));
+    const ch = c.querySelector('.chev'); if (ch) ch.classList.toggle('open', !mi);
+  });
+  const ta = document.querySelector('[data-act=live-toggleall]'); if (ta) ta.textContent = a.entries.every((_, i) => m[i]) ? 'Expandir todos' : 'Minimizar todos';
+}
 function liveView() {
   const a = state.active, mn = liveMin(a);
   return `
@@ -541,9 +550,9 @@ function liveView() {
   ${a.entries.length > 1 ? `<div class="row" style="justify-content:flex-end;margin:-4px 0 10px"><button class="btn-sm btn-ghost" data-act="live-toggleall">${a.entries.every((_, i) => mn[i]) ? 'Expandir todos' : 'Minimizar todos'}</button></div>` : ''}
   ${a.entries.map((e, ei) => {
     const le = lastEntry(e.exId), min = !!mn[ei], dn = e.sets.filter(s => s.done).length;
-    if (min) return `<div class="card ex-card min ${dn === e.sets.length ? 'all' : ''}"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="false"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev" aria-hidden="true"></i></button></div>`;
-    return `<div class="card ex-card">
-      <div class="row between"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="true"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev open" aria-hidden="true"></i></button><button class="btn-sm icon-btn btn-danger" data-act="live-exdel" data-e="${ei}">✕</button></div>
+    return `<div class="card ex-card ${min ? 'min' : ''} ${dn === e.sets.length ? 'all' : ''}" data-ei="${ei}">
+      <div class="row between ex-head"><button class="ex-toggle" data-act="live-toggle" data-e="${ei}" aria-expanded="${!min}"><h3>${esc(exName(e.exId))}</h3><span class="prog">${dn}/${e.sets.length}</span><i class="chev ${min ? '' : 'open'}" aria-hidden="true"></i></button><button class="btn-sm icon-btn btn-danger ex-del" data-act="live-exdel" data-e="${ei}" aria-label="Quitar ejercicio">✕</button></div>
+      <div class="ex-body"><div class="ex-in">
       <p class="hint">${le ? 'Última vez: ' + fmtD(le.date) : 'Primera vez con este ejercicio'}${e.rid ? ' · la meta sube sola cuando la superás' : ''}</p>
       <div class="set-head"><span>Serie</span><span>Anterior</span><span>Kg</span><span>Reps</span><span></span></div>
       ${e.sets.map((s, si) => {
@@ -562,6 +571,7 @@ function liveView() {
       }).join('')}
       <div class="addrow"><button class="addset" data-act="live-addset" data-e="${ei}">+ Añadir serie (${fmtRest(state.settings.rest || 90)})</button>
       <button class="btn-sm btn-ghost" data-act="live-delset" data-e="${ei}" aria-label="Quitar la última serie">− Serie</button></div>
+      </div></div>
     </div>`;
   }).join('')}
   <button class="btn-block" data-act="live-addex">+ Añadir ejercicio</button>
@@ -963,8 +973,9 @@ const ACTIONS = {
   },
   'live-addset': el => { const e = state.active.entries[+el.dataset.e]; const l = e.sets[e.sets.length - 1]; e.sets.push({ w: l?.w ?? null, r: l?.r ?? null, done: false }); save(); render(true); },
   'live-delset': el => { const e = state.active.entries[+el.dataset.e]; if (e.sets.length > 1) { e.sets.pop(); save(); render(true); } },
-  'live-toggle': el => { const m = liveMin(state.active), i = +el.dataset.e; m[i] = !m[i]; render(true); },
-  'live-toggleall': () => { const a = state.active, m = liveMin(a), all = a.entries.every((_, i) => m[i]); a.entries.forEach((_, i) => { m[i] = !all; }); render(true); },
+  // Se anima en el lugar (sin volver a dibujar la pantalla): la altura y el desenfoque transicionan.
+  'live-toggle': el => { const m = liveMin(state.active), i = +el.dataset.e; m[i] = !m[i]; paintMin(); },
+  'live-toggleall': () => { const a = state.active, m = liveMin(a), all = a.entries.every((_, i) => m[i]); a.entries.forEach((_, i) => { m[i] = !all; }); paintMin(); },
   'live-exdel': el => { if (confirm('¿Quitar este ejercicio de la sesión?')) { const i = +el.dataset.e, m = liveMin(state.active), n = {}; Object.keys(m).forEach(k => { k = +k; if (k < i) n[k] = m[k]; else if (k > i) n[k - 1] = m[k]; }); ui.min = n; state.active.entries.splice(i, 1); save(); render(true); } },
   'live-addex': () => pickExercise(id => { const l = lastSets(id); state.active.entries.push({ exId: id, sets: Array.from({ length: 3 }, (_, i) => ({ w: l?.[i]?.w ?? l?.[0]?.w ?? null, r: l?.[i]?.r ?? null, done: false })) }); ui.min && (ui.min[state.active.entries.length - 1] = false); save(); render(true); }),
   'live-finish': finishSession,

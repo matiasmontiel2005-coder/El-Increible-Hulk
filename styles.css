@@ -289,7 +289,6 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .ex-toggle .prog { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .ex-toggle .chev { width: 8px; height: 8px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform .25s; margin: 0 4px 0 2px; flex: none; }
 .ex-toggle .chev.open { transform: rotate(45deg); }
-.ex-card.min { padding-top: 12px; padding-bottom: 12px; margin-bottom: 8px; }
 .ex-card.min.all .prog { color: var(--hi); }
 @media (prefers-reduced-motion: reduce) { .ex-toggle .chev { transition: none; } }
 
@@ -316,3 +315,15 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .set-head span { text-indent: .14em; } /* compensa el espacio que deja el letter-spacing tras la última letra */
 .set input[type=number] { text-align: center; -webkit-appearance: none; appearance: textfield; -moz-appearance: textfield; padding-left: 0; padding-right: 0; }
 .set input[type=number]::-webkit-inner-spin-button, .set input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Minimizar ejercicios: misma coreografía que el resto de la app (altura con resorte suave + desenfoque que entra y sale) */
+.ex-card .ex-body { display: grid; grid-template-rows: 1fr; transition: grid-template-rows .6s var(--out), visibility 0s; }
+.ex-card .ex-in { overflow: hidden; min-height: 0; opacity: 1; filter: none; transform: none; transition: opacity .45s var(--out), filter .45s var(--out), transform .6s var(--out); }
+.ex-card.min .ex-body { grid-template-rows: 0fr; visibility: hidden; transition: grid-template-rows .6s var(--out), visibility 0s .6s; }
+.ex-card.min .ex-in { opacity: 0; filter: blur(8px); transform: translateY(-10px); }
+.ex-card .ex-del { transition: opacity .35s var(--out); }
+.ex-card.min .ex-del { opacity: 0; pointer-events: none; }
+.ex-card .ex-toggle .chev { transition: transform .5s var(--spring); }
+.ex-card { transition: padding .6s var(--out), margin .6s var(--out); }
+.ex-card.min { padding-top: 12px; padding-bottom: 12px; }
+@media (prefers-reduced-motion: reduce) { .ex-card, .ex-card .ex-body, .ex-card .ex-in, .ex-card .ex-del, .ex-card .ex-toggle .chev { transition: none !important; } }
