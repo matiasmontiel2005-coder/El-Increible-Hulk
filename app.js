@@ -242,7 +242,7 @@ function countPRs() {
   }
   return n;
 }
-function trainingDates() { return new Set([...state.sessions.map(s => s.date), ...state.runs.map(r => r.date)]); }
+function trainingDates() { return new Set([...state.sessions.map(s => s.date), ...state.runs.map(r => r.date), ...state.matches.map(m => m.date)]); }
 function sessionsInWeek(ws) { return state.sessions.filter(s => s.date >= ws && s.date <= addDays(ws, 6)); }
 
 function xpInfo() {
