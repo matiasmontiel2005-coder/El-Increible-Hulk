@@ -80,11 +80,11 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /* ---------- Estado ---------- */
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
-  exercises: [], routine: {}, sessions: [], runs: [], body: [], goals: [], profile: { name: '', share: true },
+  exercises: [], routine: {}, sessions: [], runs: [], matches: [], body: [], goals: [], profile: { name: '', share: true },
   active: null, settings: { rest: 90 }
 });
 let state = emptyState();
-const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', exId: null, bodyType: 'peso', startDay: null, min: null };
+const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', runTab: 'correr', exId: null, bodyType: 'peso', startDay: null, min: null };
 
 /* ---------- Saneado de datos: todo lo que viene de afuera (respaldo, nube, otra cuenta) se valida y se acota ---------- */
 const SAN = {
@@ -149,6 +149,11 @@ function sanitizeState(raw) {
     const id = SAN.id(r?.id), date = SAN.date(r?.date), km = SAN.range(r?.km, 0.01, 400), min = SAN.range(r?.min, 0.1, 2000);
     if (!id || !date || km == null || min == null) return null;
     return { id, date, km, min, pace: SAN.num(r.pace, 0.1, 59), source: 'manual' };
+  }).filter(Boolean);
+  d.matches = SAN.arr(raw.matches, 5000).map(m => {
+    const id = SAN.id(m?.id), date = SAN.date(m?.date), goals = SAN.range(m?.goals, 0, 99), min = SAN.range(m?.min, 1, 300);
+    if (!id || !date || goals == null || min == null) return null;
+    return { id, date, goals: Math.round(goals), min: Math.round(min) };
   }).filter(Boolean);
   d.body = SAN.arr(raw.body, 5000).map(b => {
     const id = SAN.id(b?.id), date = SAN.date(b?.date), value = SAN.range(b?.value, 0, 1000);
@@ -686,19 +691,40 @@ function goalForm(type = 'strength') {
 }
 
 /* --- Correr --- */
+const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + m % 60 + ' min' : ''}` : `${m} min`;
 V.correr = () => {
+  const fut = ui.runTab === 'futbol';
+  const seg = [['correr', 'Correr'], ['futbol', 'Fútbol']].map(([k, n]) => `<button class="${ui.runTab === k ? 'on' : ''}" data-act="rtab" data-t="${k}">${n}</button>`).join('');
+  return `<h1>${fut ? 'Fútbol' : 'Correr'}</h1><div class="seg" style="margin:0 0 14px">${seg}</div>` + (fut ? futbolView() : runView());
+};
+function futbolView() {
+  const ms = state.matches.slice().sort((a, b) => b.date.localeCompare(a.date) || 0);
+  const goals = ms.reduce((a, m) => a + m.goals, 0), mins = ms.reduce((a, m) => a + m.min, 0);
+  return `<p class="sub">Cargá cada partido que jugaste: los goles que hiciste y cuántos minutos jugaste.</p>
+  <button class="btn-primary btn-block" data-act="match-new" style="margin-bottom:12px">+ Registrar partido</button>
+  <div class="grid3"><div class="card stat"><b>${ms.length}</b><span>Partidos</span></div><div class="card stat"><b>${goals}</b><span>Goles</span></div><div class="card stat"><b>${mins}</b><span>Minutos</span></div></div>
+  ${ms.length ? `<div class="card"><h3>Goles por partido</h3><div class="chart-box"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
+  <div class="card">${ms.slice(0, 50).map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div>
+    <button class="btn-sm icon-btn btn-danger" data-act="match-del" data-id="${m.id}" aria-label="Eliminar partido">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin partidos registrados.</div>`}`;
+}
+function runView() {
   const runs = state.runs.slice().sort((a, b) => b.date.localeCompare(a.date));
   const since = addDays(today(), -30), m = runs.filter(r => r.date >= since);
   const km = m.reduce((a, r) => a + r.km, 0), paceW = km ? m.reduce((a, r) => a + runPace(r) * r.km, 0) / km : 0;
-  return `<h1>Correr</h1><p class="sub">Registrá cada carrera con tres datos: kilómetros, duración y ritmo promedio por kilómetro. Tu rival puede verlos en la Arena.</p>
+  return `<p class="sub">Registrá cada carrera con tres datos: kilómetros, duración y ritmo promedio por kilómetro. Tu rival puede verlos en la Arena.</p>
   <button class="btn-primary btn-block" data-act="run-new" style="margin-bottom:12px">+ Registrar carrera</button>
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Salidas</span></div><div class="card stat"><b>${paceW ? fmtTime(paceW) : '–'}</b><span>Ritmo medio</span></div></div>
   ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Ritmo por salida (min/km)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>` : ''}
   ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>
     <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin carreras registradas.</div>`}`;
-};
+}
 function afterCorrer() {
+  if (ui.runTab === 'futbol') {
+    const ms = state.matches.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-15); if (!ms.length) return;
+    drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [{ data: ms.map(m => m.goals), backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true, ticks: { precision: 0 } } } }) });
+    return;
+  }
   const runs = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)); if (!runs.length) return;
   const ws = weekStart(today()), labels = [], kms = [];
   for (let w = 11; w >= 0; w--) { const s = addDays(ws, -7 * w); labels.push(fmtD(s)); kms.push(Math.round(state.runs.filter(r => r.date >= s && r.date <= addDays(s, 6)).reduce((a, r) => a + r.km, 0) * 10) / 10); }
@@ -998,6 +1024,19 @@ const ACTIONS = {
   },
 
   // progreso
+  rtab: el => { ui.runTab = el.dataset.t === 'futbol' ? 'futbol' : 'correr'; render(true); },
+  'match-new': () => openModal(`<h2 style="margin-top:0">Registrar partido</h2>
+    <label>Fecha</label><input id="m_d" type="date" value="${today()}">
+    <label>Goles que hiciste</label><input id="m_g" type="number" inputmode="numeric" min="0" max="99" step="1" placeholder="Ej: 2">
+    <label>Minutos jugados</label><input id="m_m" type="number" inputmode="numeric" min="1" max="300" step="1" placeholder="Ej: 90">
+    <div class="row" style="margin-top:16px"><button class="btn-ghost grow" data-act="modal-close">Cancelar</button><button class="btn-primary grow" data-act="match-save">Guardar</button></div>`),
+  'match-save': () => {
+    const g = mv('m_g'), m = mv('m_m'), goals = SAN.range(g === '' ? NaN : g, 0, 99), min = SAN.range(m === '' ? NaN : m, 1, 300);
+    if (goals == null || min == null || !Number.isInteger(goals) || !Number.isInteger(min)) return toast('Completá goles (0 a 99) y minutos jugados (1 a 300)');
+    state.matches.push({ id: uid(), date: SAN.date(mv('m_d')) || today(), goals, min });
+    save(); closeModal(); toast('Partido registrado'); render(true);
+  },
+  'match-del': el => { if (confirm('¿Eliminar este partido?')) { state.matches = state.matches.filter(m => m.id !== el.dataset.id); save(); render(true); } },
   ptab: el => { ui.progTab = el.dataset.t; render(true); },
   btype: el => { ui.bodyType = el.dataset.t; render(true); },
   'body-add': () => {
@@ -1132,7 +1171,7 @@ document.addEventListener('change', ev => {
     f.text().then(t => {
       const d = JSON.parse(t); if (!d || typeof d !== 'object' || !Array.isArray(d.sessions)) throw new Error('formato');
       const clean = sanitizeState(d);
-      if (!confirm(`El respaldo tiene ${clean.sessions.length} entrenamientos, ${clean.runs.length} carreras y ${clean.goals.length} campañas. Esto reemplaza tus datos actuales. ¿Continuar?`)) return;
+      if (!confirm(`El respaldo tiene ${clean.sessions.length} entrenamientos, ${clean.runs.length} carreras, ${clean.matches.length} partidos y ${clean.goals.length} campañas. Esto reemplaza tus datos actuales. ¿Continuar?`)) return;
       const owner = state.owner; state = clean; state.owner = owner; save(); toast('Respaldo restaurado'); render();
     }).catch(() => toast('Archivo de respaldo inválido')).finally(() => { el.value = ''; });
   }
