@@ -28,7 +28,7 @@ const CATALOG = [];
 for (const g of GROUPS) for (const n of CATALOG_RAW[g]) CATALOG.push({ id: 'c:' + n, name: n, group: g });
 
 // Puntos de gloria que suma cada hito (la mitad que antes: subir de nivel cuesta el doble).
-const XP = { sesion: 10, serie: 0.5, km: 1.5, record: 15, campana: 50 };
+const XP = { sesion: 10, serie: 0.5, km: 1.5, record: 15, campana: 50, partido: 8, gol: 2 };
 const RANKS = [
   { min: 0, name: 'Recluta', icon: '🛡' },
   { min: 150, name: 'Legionario', icon: '⚔' },
@@ -184,7 +184,8 @@ function cleanStats(s) {
     if (c++ >= 60) break; const name = SAN.str(k, 50), w = SAN.num(v, 0, 1000); if (name && w != null && name !== '__proto__') lifts[name] = w;
   }
   return { rank: SAN.str(s.rank, 20), tier: SAN.str(s.tier, 6), xp: n(s.xp), prs: n(s.prs, 1e5), streak: n(s.streak, 1e4), sessions30: n(s.sessions30, 1e3), km30: n(s.km30, 1e5),
-    goalsDone: n(s.goalsDone, 1e4), weeks: a8(s.weeks), wkm: a8(s.wkm), lifts, runs: SAN.arr(s.runs, 10).map(cleanRun).filter(Boolean) };
+    goalsDone: n(s.goalsDone, 1e4), matches30: n(s.matches30, 1e3), goals30: n(s.goals30, 1e4), weeks: a8(s.weeks), wkm: a8(s.wkm), lifts,
+    runs: SAN.arr(s.runs, 10).map(cleanRun).filter(Boolean), matches: SAN.arr(s.matches, 10).map(cleanMatch).filter(Boolean) };
 }
 
 function loadState() {
@@ -249,7 +250,8 @@ function xpInfo() {
   const km = state.runs.reduce((a, r) => a + (r.km || 0), 0);
   const goalsDone = state.goals.filter(g => goalProgress(g).pct >= 1).length;
   const prs = countPRs();
-  const xp = Math.round(state.sessions.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana);
+  const goals = state.matches.reduce((a, m) => a + m.goals, 0);
+  const xp = Math.round(state.sessions.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana + state.matches.length * XP.partido + goals * XP.gol);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
   return { xp, rank: cur, roman: ROMAN[i], nextRoman: ROMAN[i + 1], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
@@ -386,6 +388,13 @@ function cleanRun(r) {
   return { km, min, pace, date };
 }
 
+function cleanMatch(m) {
+  if (!m || typeof m !== 'object') return null;
+  const goals = Number(m.goals), min = Number(m.min), date = String(m.date || '');
+  if (!Number.isInteger(goals) || goals < 0 || goals > 99 || !Number.isInteger(min) || min < 1 || min > 300 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return { goals, min, date };
+}
+
 /* ---------- Temporizador de descanso ---------- */
 let rest = null;
 function startRest(sec) { rest = { end: Date.now() + sec * 1000 }; tickRest(); clearInterval(startRest.i); startRest.i = setInterval(tickRest, 250); }
@@ -435,7 +444,7 @@ V.foro = () => {
     </div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
     <div class="glory"><span>${x.xp} pts</span>${x.next ? `<span class="falta">Faltan <b>${x.next.min - x.xp}</b> puntos</span><span>${x.next.min} pts</span>` : '<span class="falta">Alcanzaste el nivel máximo</span><span></span>'}</div>
-    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
+    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}), partido de fútbol (+${fmtN(XP.partido)}), gol (+${fmtN(XP.gol)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
     <div class="muted small" style="margin-top:12px;font-style:italic">“${quote}”</div>
   </div>
   <h2>Esta semana</h2>
@@ -700,7 +709,7 @@ V.correr = () => {
 function futbolView() {
   const ms = state.matches.slice().sort((a, b) => b.date.localeCompare(a.date) || 0);
   const goals = ms.reduce((a, m) => a + m.goals, 0), mins = ms.reduce((a, m) => a + m.min, 0);
-  return `<p class="sub">Cargá cada partido que jugaste: los goles que hiciste y cuántos minutos jugaste.</p>
+  return `<p class="sub">Cargá cada partido: los goles que hiciste y los minutos que jugaste. Suman gloria y tu rival los ve en la Arena.</p>
   <button class="btn-primary btn-block" data-act="match-new" style="margin-bottom:12px">+ Registrar partido</button>
   <div class="grid3"><div class="card stat"><b>${ms.length}</b><span>Partidos</span></div><div class="card stat"><b>${goals}</b><span>Goles</span></div><div class="card stat"><b>${mins}</b><span>Minutos</span></div></div>
   ${ms.length ? `<div class="card"><h3>Goles por partido</h3><div class="chart-box"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
@@ -778,6 +787,8 @@ function sharedRuns() {
   return state.runs.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10)
     .map(r => ({ date: r.date, km: r.km, min: r.min, pace: Math.round(runPace(r) * 1000) / 1000 }));
 }
+// Últimos partidos que se publican en la Arena (goles y minutos jugados).
+const sharedMatches = () => state.matches.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10).map(m => ({ date: m.date, goals: m.goals, min: m.min }));
 function buildStats() {
   const t = today(), ws = weekStart(t), since = addDays(t, -30), x = xpInfo(), td = [...trainingDates()];
   const weeks = [], wkm = [];
@@ -789,11 +800,12 @@ function buildStats() {
   const lifts = {};
   for (const e of allEx()) { const b = bestWeight(e.id); if (b > 0) lifts[e.name] = b; }
   return {
-    v: 3, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
+    v: 4, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
     sessions30: td.filter(d => d >= since).length,
     km30: Math.round(state.runs.filter(r => r.date >= since).reduce((q, r) => q + r.km, 0) * 10) / 10,
     goalsDone: state.goals.filter(g => goalProgress(g).pct >= 1).length,
-    weeks, wkm, lifts, runs: sharedRuns()
+    matches30: state.matches.filter(m => m.date >= since).length, goals30: state.matches.filter(m => m.date >= since).reduce((q, m) => q + m.goals, 0),
+    weeks, wkm, lifts, runs: sharedRuns(), matches: sharedMatches()
   };
 }
 async function pushProfile() {
@@ -826,6 +838,11 @@ function rrunsHtml(rv) {
   if (!runs.length) return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró carreras.</div>`;
   return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card">${runs.map(r => `<div class="list-item" style="display:block"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>`).join('')}</div>`;
 }
+function rmatchesHtml(rv) {
+  const ms = (Array.isArray(rv.stats?.matches) ? rv.stats.matches : []).map(cleanMatch).filter(Boolean);
+  if (!ms.length) return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró partidos.</div>`;
+  return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card">${ms.map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div></div>`).join('')}</div>`;
+}
 function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
   const tot = a + b, pa = tot ? a / tot * 100 : 50, pb = tot ? b / tot * 100 : 50;
   const lead = a > b ? 'a' : b > a ? 'b' : '';
@@ -842,7 +859,7 @@ function renderArena() {
     <div class="grow"><b class="${r.me ? 'gold-t' : ''}">${esc(r.name)}</b><div class="muted small">${esc(r.tier)}</div></div><span class="tag ${r.me ? 'gold' : ''}">${r.xp} xp</span></div>`).join('')}</div>`;
   if (!rivals.length) { box.innerHTML = arenaMsg('Todavía no hay otros gladiadores.<br>Pedile a tu rival que cree su cuenta y active “Compartir mi progreso”.', '<br><br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
   const rv = rivals.find(r => r.user_id === ui.rivalId) || rivals[0], s = rv.stats || {};
-  const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)],
+  const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)], ['Partidos · 30 días', me.matches30, N(s.matches30)], ['Goles · 30 días', me.goals30, N(s.goals30)],
     ['Récords', me.prs, N(s.prs)], ['Semanas seguidas', me.streak, N(s.streak)], ['Campañas cumplidas', me.goalsDone, N(s.goalsDone)]];
   const wa = rows.filter(r => r[1] > r[2]).length, wb = rows.filter(r => r[2] > r[1]).length;
   const lifts = Object.keys(me.lifts).filter(n => s.lifts && s.lifts[n]).sort((a, b) => (me.lifts[b] + s.lifts[b]) - (me.lifts[a] + s.lifts[a])).slice(0, 10);
@@ -854,6 +871,7 @@ function renderArena() {
   <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><p class="muted small" style="margin:0">Kilómetros por semana</p><div class="chart-box"><canvas id="ch2"></canvas></div></div>
   ${rrunsHtml(rv)}
+  ${rmatchesHtml(rv)}
   <h2>Cargas máximas</h2>
   <div class="card">${lifts.length ? `<div class="lift head"><span>Ejercicio</span><span class="v">Tú</span><span class="v">${esc(rv.name).slice(0, 8)}</span></div>` + lifts.map(n => `<div class="lift"><span>${esc(n)}</span>
     <span class="v ${me.lifts[n] > s.lifts[n] ? 'win' : ''}">${fmtN(me.lifts[n])}</span><span class="v ${s.lifts[n] > me.lifts[n] ? 'win' : ''}">${fmtN(s.lifts[n])}</span></div>`).join('')
