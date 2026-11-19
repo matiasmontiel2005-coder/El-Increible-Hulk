@@ -204,6 +204,8 @@ function save(touch = true) {
 const allEx = () => CATALOG.concat(state.exercises);
 const exById = id => allEx().find(e => e.id === id);
 const exName = id => exById(id)?.name || '(ejercicio eliminado)';
+// Entrenamientos que cuentan para gloria, racha y Arena: mientras se edita uno ya terminado, ese no cuenta hasta volver a terminarlo.
+const gameSessions = () => state.active?.edit ? state.sessions.filter(s => s.id !== state.active.id) : state.sessions;
 const sessionsSorted = () => state.sessions.slice().sort((a, b) => a.date.localeCompare(b.date) || (a.start || 0) - (b.start || 0));
 
 function exHistory(exId) {
@@ -236,7 +238,7 @@ function prevSet(le, i) {
 
 function countPRs() {
   const max = {}; let n = 0;
-  for (const s of sessionsSorted()) for (const e of s.entries) {
+  for (const s of gameSessions().slice().sort((a, b) => a.date.localeCompare(b.date) || (a.start || 0) - (b.start || 0))) for (const e of s.entries) {
     const w = Math.max(0, ...e.sets.filter(x => x.done && x.w).map(x => x.w));
     if (!w) continue;
     if (max[e.exId] != null && w > max[e.exId]) n++;
@@ -244,16 +246,16 @@ function countPRs() {
   }
   return n;
 }
-function trainingDates() { return new Set([...state.sessions.map(s => s.date), ...state.runs.map(r => r.date), ...state.matches.map(m => m.date)]); }
+function trainingDates() { return new Set([...gameSessions().map(s => s.date), ...state.runs.map(r => r.date), ...state.matches.map(m => m.date)]); }
 function sessionsInWeek(ws) { return state.sessions.filter(s => s.date >= ws && s.date <= addDays(ws, 6)); }
 
 function xpInfo() {
-  const sets = state.sessions.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.filter(x => x.done).length, 0), 0);
+  const gs = gameSessions(), sets = gs.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.filter(x => x.done).length, 0), 0);
   const km = state.runs.reduce((a, r) => a + (r.km || 0), 0);
   const goalsDone = state.goals.filter(g => goalProgress(g).pct >= 1).length;
   const prs = countPRs();
   const goals = state.matches.reduce((a, m) => a + m.goals, 0);
-  const xp = Math.round(state.sessions.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana + state.matches.length * XP.partido + goals * XP.gol);
+  const xp = Math.round(gs.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana + state.matches.length * XP.partido + goals * XP.gol);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
   return { xp, rank: cur, roman: ROMAN[i], nextRoman: ROMAN[i + 1], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
