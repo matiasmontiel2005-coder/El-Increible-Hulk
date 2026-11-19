@@ -117,6 +117,7 @@ function sanSession(x) {
     }).filter(Boolean)
   };
   const day = SAN.num(x.day, 0, 6); if (day != null) o.day = Math.round(day);
+  if (x.edit === true) o.edit = true; // entrenamiento ya terminado que se reabrió para corregir
   return o;
 }
 // Series de un ejercicio de la rutina: [{ r: repeticiones, w: peso }]. Convierte el formato viejo (mismo valor en todas).
@@ -535,6 +536,7 @@ function startView() {
     return `<div class="list-item"><div class="grow"><b>${esc(s.name)}</b>${s.prs?.length ? `<span class="pr">${s.prs.length} PR</span>` : ''}
       <div class="muted small">${fmtD(s.date)} · ${s.entries.length} ejercicios · ${sets} series · ${Math.round(vol)} kg volumen${s.dur ? ' · ' + s.dur + ' min' : ''}</div></div>
       <button class="btn-sm icon-btn" data-act="sess-view" data-id="${s.id}">Ver</button>
+      <button class="btn-sm icon-btn" data-act="sess-reopen" data-id="${s.id}" aria-label="Reabrir y editar">Editar</button>
       <button class="btn-sm icon-btn btn-danger" data-act="sess-del" data-id="${s.id}">✕</button></div>`;
   }).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Aún no hay batallas registradas.</div>`}`;
 }
@@ -561,6 +563,7 @@ function liveView() {
   const a = state.active, mn = liveMin(a);
   return `
   <div class="row between"><div><h1>${esc(a.name)}</h1><p class="sub" style="margin:0">${fmtD(a.date)} · empezó ${new Date(a.start).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</p></div></div>
+  ${a.edit ? '<p class="hint" style="margin:8px 0 0">Estás editando un entrenamiento que ya habías terminado. Al terminar, reemplaza la versión anterior.</p>' : ''}
   <div style="height:12px"></div>
   ${a.entries.length > 1 ? `<div class="row" style="justify-content:flex-end;margin:-4px 0 10px"><button class="btn-sm btn-ghost" data-act="live-toggleall">${a.entries.every((_, i) => mn[i]) ? 'Expandir todos' : 'Minimizar todos'}</button></div>` : ''}
   ${a.entries.map((e, ei) => {
@@ -590,8 +593,8 @@ function liveView() {
     </div>`;
   }).join('')}
   <button class="btn-block" data-act="live-addex">+ Añadir ejercicio</button>
-  <button class="btn-primary btn-block" style="margin-top:12px" data-act="live-finish">Terminar entrenamiento</button>
-  <button class="btn-block btn-danger" style="margin-top:10px" data-act="live-cancel">Descartar</button>`;
+  <button class="btn-primary btn-block" style="margin-top:12px" data-act="live-finish">${a.edit ? 'Guardar cambios' : 'Terminar entrenamiento'}</button>
+  <button class="btn-block btn-danger" style="margin-top:10px" data-act="live-cancel">${a.edit ? 'Cancelar edición' : 'Descartar'}</button>`;
 }
 
 /* --- Progreso --- */
@@ -967,6 +970,7 @@ async function finishSession() {
   const a = state.active;
   const entries = a.entries.map(e => ({ exId: e.exId, sets: e.sets.map((s, n) => ({ s, n })).filter(o => o.s.done).map(o => ({ w: o.s.w, r: o.s.r, done: true, n: o.n })) })).filter(e => e.sets.length);
   if (!entries.length) return toast('Marcá al menos una serie como hecha (✔)');
+  if (a.edit) state.sessions = state.sessions.filter(x => x.id !== a.id); // se reemplaza la versión anterior (y no cuenta contra sus propios récords)
   const prs = [];
   for (const e of entries) {
     const w = Math.max(0, ...e.sets.map(s => s.w || 0));
@@ -978,7 +982,7 @@ async function finishSession() {
   state.active = null; stopRest(); save();
   location.hash = '#/progreso'; ui.progTab = 'fuerza'; if (entries[0]) ui.exId = entries[0].exId;
   render();
-  const msg = prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. ¡Ave!';
+  const msg = a.edit ? 'Entrenamiento actualizado.' : prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. Si lo cerraste sin querer, reabrilo desde Entrenar → Historial.';
   toast(subidas ? `${msg} Subieron las metas de ${subidas} serie${subidas === 1 ? '' : 's'} en tu rutina.` : msg, 5200);
 }
 
@@ -1024,13 +1028,22 @@ const ACTIONS = {
   'live-exdel': el => { if (confirm('¿Quitar este ejercicio de la sesión?')) { const i = +el.dataset.e, m = liveMin(state.active), n = {}; Object.keys(m).forEach(k => { k = +k; if (k < i) n[k] = m[k]; else if (k > i) n[k - 1] = m[k]; }); ui.min = n; state.active.entries.splice(i, 1); save(); render(true); } },
   'live-addex': () => pickExercise(id => { const l = lastSets(id); state.active.entries.push({ exId: id, sets: Array.from({ length: 3 }, (_, i) => ({ w: l?.[i]?.w ?? l?.[0]?.w ?? null, r: l?.[i]?.r ?? null, done: false })) }); ui.min && (ui.min[state.active.entries.length - 1] = false); save(); render(true); }),
   'live-finish': finishSession,
-  'live-cancel': () => { if (confirm('¿Descartar el entrenamiento en curso?')) { state.active = null; stopRest(); save(); render(); } },
+  'live-cancel': () => { if (confirm(state.active?.edit ? '¿Cancelar la edición? Se conserva el entrenamiento como estaba.' : '¿Descartar el entrenamiento en curso?')) { state.active = null; stopRest(); save(); render(); } },
   'sess-del': el => { if (confirm('¿Eliminar esta sesión del historial?')) { state.sessions = state.sessions.filter(s => s.id !== el.dataset.id); save(); render(true); } },
+  'sess-reopen': el => {
+    const x = state.sessions.find(q => q.id === el.dataset.id); if (!x) return;
+    if (state.active && !confirm('Ya tenés un entrenamiento en curso. ¿Reemplazarlo?')) return;
+    closeModal();
+    state.active = { id: x.id, date: x.date, start: Date.now() - (x.dur || 1) * 60000, name: x.name, edit: true, ...(x.day != null ? { day: x.day } : {}),
+      entries: x.entries.map(e => ({ exId: e.exId, sets: e.sets.map(q => ({ w: q.w, r: q.r, done: true })) })) };
+    ui.min = null; save(); location.hash = '#/entrenar'; render(); toast('Entrenamiento reabierto: editalo y volvé a terminarlo');
+  },
   'sess-view': el => {
     const s = state.sessions.find(x => x.id === el.dataset.id); if (!s) return;
     openModal(`<h2 style="margin-top:0">${esc(s.name)}</h2><p class="sub">${fmtD(s.date)}${s.dur ? ' · ' + s.dur + ' min' : ''}</p>
       ${s.entries.map(e => `<div class="list-item"><div class="grow"><b>${esc(exName(e.exId))}</b>${s.prs?.includes(e.exId) ? '<span class="pr">PR</span>' : ''}<div class="muted small">${e.sets.map(x => `${fmtN(x.w)}kg×${x.r}`).join(' · ')}</div></div></div>`).join('')}
-      <button class="btn-ghost btn-block" style="margin-top:12px" data-act="modal-close">Cerrar</button>`);
+      <button class="btn-primary btn-block" style="margin-top:12px" data-act="sess-reopen" data-id="${s.id}">Reabrir y editar</button>
+      <button class="btn-ghost btn-block" style="margin-top:8px" data-act="modal-close">Cerrar</button>`);
   },
 
   // selector ejercicios
