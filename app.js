@@ -71,6 +71,7 @@ const dow = s => (pd(s).getDay() + 6) % 7;
 const weekStart = s => addDays(s, -dow(s));
 const diffDays = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
 const fmtD = s => { const d = pd(s); const o = { day: 'numeric', month: 'short' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = '2-digit'; return d.toLocaleDateString('es-AR', o); };
+const dv = v => v == null || v === '' ? '' : String(v).replace('.', ',');
 const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
 const fmtN = (n, dec = 1) => n == null ? '–' : (Math.round(n * 10 ** dec) / 10 ** dec).toString().replace('.', ',');
 const fmtTime = min => { if (min == null) return '–'; const s = Math.round(min * 60); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), ss = s % 60; return h ? `${h}:${pad(m)}:${pad(ss)}` : `${m}:${pad(ss)}`; };
@@ -90,9 +91,9 @@ const ui = { routineDay: (new Date().getDay() + 6) % 7, progTab: 'fuerza', runTa
 const SAN = {
   id: v => (typeof v === 'string' && v.length >= 1 && v.length <= 100 && !/[<>"'`&\\\u0000-\u001f]/.test(v)) ? v : null,
   str: (v, max) => typeof v === 'string' ? v.replace(/[\u0000-\u001f\u007f<>]/g, '').slice(0, max) : '',
-  num: (v, min, max, dflt = null) => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt; },
+  num: (v, min, max, dflt = null) => { const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : dflt; },
   // range: si el dato obligatorio está fuera de rango se descarta (en vez de inventar un valor recortado)
-  range: (v, min, max) => { const n = typeof v === 'number' ? v : parseFloat(v); return Number.isFinite(n) && n >= min && n <= max ? n : null; },
+  range: (v, min, max) => { const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.')); return Number.isFinite(n) && n >= min && n <= max ? n : null; },
   date: v => (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? v : null,
   arr: (v, max) => Array.isArray(v) ? v.slice(0, max) : []
 };
@@ -504,7 +505,7 @@ V.rutina = () => {
     <div class="sets-head"><span>Serie</span><span>Reps</span><span>Peso (kg)</span></div>
     ${it.sets.map((t, si) => `<div class="srow"><span class="n">${si + 1}</span>
       <input type="number" inputmode="numeric" min="1" max="1000" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="r" value="${t.r ?? ''}" placeholder="reps" aria-label="Repeticiones de la serie ${si + 1}">
-      <input type="number" inputmode="decimal" min="0" max="1000" step="0.5" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="w" value="${t.w ?? ''}" placeholder="kg" aria-label="Peso de la serie ${si + 1}"></div>`).join('')}
+      <input type="text" inputmode="decimal" autocomplete="off" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="w" value="${dv(t.w)}" placeholder="kg" aria-label="Peso de la serie ${si + 1}"></div>`).join('')}
     <div class="row" style="margin-top:4px"><button class="btn-sm" data-act="rset-add" data-id="${it.id}" ${it.sets.length >= 20 ? 'disabled' : ''}>+ Serie</button>
       <button class="btn-sm btn-ghost" data-act="rset-del" data-id="${it.id}" ${it.sets.length <= 1 ? 'disabled' : ''}>− Serie</button></div>
   </div>`).join('') : `<div class="card empty"><span class="big">···</span>${DAYS[d]} está vacío.<br>Agregá ejercicios o dejalo como día de descanso.</div>`}
@@ -577,7 +578,7 @@ function liveView() {
         return `<div class="setwrap ${s.done ? 'done' : ''}"><div class="set ${s.done ? 'done' : ''}">
         <span class="n">${si + 1}</span>
         <span class="prev">${ant}</span>
-        <input type="number" inputmode="decimal" step="0.5" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="w" value="${s.w ?? ''}" placeholder="kg" aria-label="Peso realizado, serie ${si + 1}">
+        <input type="text" inputmode="decimal" autocomplete="off" data-in="live" data-e="${ei}" data-s="${si}" data-f="w" value="${dv(s.w)}" placeholder="kg" aria-label="Peso realizado, serie ${si + 1}">
         <input type="number" inputmode="numeric" min="0" max="1000" data-in="live" data-e="${ei}" data-s="${si}" data-f="r" value="${s.r ?? ''}" placeholder="reps" aria-label="Repeticiones realizadas, serie ${si + 1}">
         <button class="ok" data-act="live-done" data-e="${ei}" data-s="${si}" aria-label="Serie hecha">✔</button></div>
         ${meta || beat ? `<div class="sethint">${meta ? `<span class="meta">${meta}</span>` : ''}${beat ? '<span class="up">↑ Superaste la meta</span>' : ''}</div>` : ''}
@@ -628,7 +629,7 @@ V.prog_cuerpo = () => {
   <div class="chips" style="margin-bottom:12px">${chips}</div>
   <div class="card gold">
     <div class="grid2"><div><label style="margin-top:0">Fecha</label><input type="date" id="bd" value="${today()}"></div>
-    <div><label style="margin-top:0">${m.name} (${m.unit})</label><input type="number" inputmode="decimal" step="0.1" id="bv" placeholder="${list.length ? fmtN(list[list.length - 1].value) : ''}"></div></div>
+    <div><label style="margin-top:0">${m.name} (${m.unit})</label><input type="text" inputmode="decimal" autocomplete="off" id="bv" placeholder="${list.length ? fmtN(list[list.length - 1].value) : ''}"></div></div>
     <button class="btn-primary btn-block" style="margin-top:12px" data-act="body-add">Registrar medida</button>
   </div>
   ${list.length ? `<div class="card"><h3>${m.name}</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
@@ -684,14 +685,14 @@ function goalForm(type = 'strength') {
     .map(([k, n]) => `<button class="${k === type ? 'on' : ''}" data-act="goal-type" data-t="${k}">${n}</button>`).join('');
   let f = '';
   if (type === 'strength') f = `<label>Ejercicio</label><select id="g_ex">${allEx().map(e => `<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select>
-    <label>Peso objetivo (kg)</label><input id="g_t" type="number" inputmode="decimal" step="0.5">`;
+    <label>Peso objetivo (kg)</label><input id="g_t" type="text" inputmode="decimal" autocomplete="off">`;
   else if (type === 'body') {
     const first = Object.keys(MEASURES)[0], l = latestBody(first);
     f = `<label>Medida</label><select id="g_m" data-in="gmeasure">${Object.entries(MEASURES).map(([k, m]) => `<option value="${k}">${m.name} (${m.unit})</option>`).join('')}</select>
-    <div class="grid2"><div><label>Valor actual</label><input id="g_b" type="number" inputmode="decimal" step="0.1" value="${l ? l.value : ''}"></div>
-    <div><label>Valor objetivo</label><input id="g_t" type="number" inputmode="decimal" step="0.1"></div></div>`;
+    <div class="grid2"><div><label>Valor actual</label><input id="g_b" type="text" inputmode="decimal" autocomplete="off" value="${l ? dv(l.value) : ''}"></div>
+    <div><label>Valor objetivo</label><input id="g_t" type="text" inputmode="decimal" autocomplete="off"></div></div>`;
   } else if (type === 'run') f = `<label>Tipo de meta</label><select id="g_mode" data-in="gmode"><option value="total">Acumular kilómetros</option><option value="longest">Correr una distancia en una salida</option><option value="time">Hacer una distancia en menos de X tiempo</option></select>
-    <div id="g_runf"><label>Kilómetros</label><input id="g_t" type="number" inputmode="decimal" step="0.1"></div>`;
+    <div id="g_runf"><label>Kilómetros</label><input id="g_t" type="text" inputmode="decimal" autocomplete="off"></div>`;
   else f = `<label>Entrenos por semana (gym o running)</label><input id="g_pw" type="number" inputmode="numeric" min="1" max="7" value="4">`;
   return `<h2 style="margin-top:0">Nueva campaña</h2><div class="seg">${tabs}</div>${f}
     <label>Fecha límite</label><input id="g_d" type="date" value="${addDays(today(), 90)}" min="${addDays(today(), 1)}">
@@ -1085,7 +1086,7 @@ const ACTIONS = {
   // correr
   'run-new': () => openModal(`<h2 style="margin-top:0">Registrar carrera</h2>
     <label>Fecha</label><input id="r_d" type="date" value="${today()}">
-    <label>Kilómetros</label><input id="r_k" type="number" inputmode="decimal" step="0.01" min="0" placeholder="Ej: 5,2">
+    <label>Kilómetros</label><input id="r_k" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 5,2">
     <label>Duración (min : seg)</label><div class="grid2"><input id="r_m" type="number" inputmode="numeric" min="0" placeholder="min"><input id="r_s" type="number" inputmode="numeric" min="0" max="59" placeholder="seg"></div>
     <label>Ritmo promedio por km (min : seg)</label><div class="grid2"><input id="r_pm" type="number" inputmode="numeric" min="0" placeholder="min"><input id="r_ps" type="number" inputmode="numeric" min="0" max="59" placeholder="seg"></div>
     <div class="row" style="margin-top:16px"><button class="btn-ghost grow" data-act="modal-close">Cancelar</button><button class="btn-primary grow" data-act="run-save">Guardar</button></div>`),
@@ -1180,8 +1181,8 @@ document.addEventListener('change', ev => {
   else if (k === 'gmode') {
     const m = el.value, box = $('#g_runf', $('#modal'));
     box.innerHTML = m === 'time'
-      ? `<div class="grid2"><div><label>Distancia (km)</label><input id="g_km" type="number" inputmode="decimal" step="0.1" value="5"></div><div><label>Tiempo máx (min:seg)</label><div class="grid2"><input id="g_min" type="number" placeholder="min"><input id="g_sec" type="number" placeholder="seg" max="59"></div></div></div>`
-      : `<label>Kilómetros</label><input id="g_t" type="number" inputmode="decimal" step="0.1">`;
+      ? `<div class="grid2"><div><label>Distancia (km)</label><input id="g_km" type="text" inputmode="decimal" autocomplete="off" value="5"></div><div><label>Tiempo máx (min:seg)</label><div class="grid2"><input id="g_min" type="number" placeholder="min"><input id="g_sec" type="number" placeholder="seg" max="59"></div></div></div>`
+      : `<label>Kilómetros</label><input id="g_t" type="text" inputmode="decimal" autocomplete="off">`;
   }
   if (el.id === 'impfile') {
     const f = el.files[0]; if (!f) return;
