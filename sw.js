@@ -1,4 +1,4 @@
-const VERSION = 'imperium-v23';
+const VERSION = 'imperium-v24';
 const CORE = ['./', 'index.html', 'guard.js', 'vendor/fonts/cinzel-latin-500-normal.woff2', 'vendor/fonts/cinzel-latin-700-normal.woff2', 'styles.css', 'app.js', 'motion.js', 'config.js', 'manifest.webmanifest',
   'vendor/chart.umd.min.js', 'vendor/supabase.min.js', 'icons/favicon-48.png', 'icons/apple-touch-icon.png', 'icons/icon-192.png', 'icons/icon-512.png'];
 

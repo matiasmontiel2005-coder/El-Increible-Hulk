@@ -28,7 +28,7 @@ const CATALOG = [];
 for (const g of GROUPS) for (const n of CATALOG_RAW[g]) CATALOG.push({ id: 'c:' + n, name: n, group: g });
 
 // Puntos de gloria que suma cada hito (la mitad que antes: subir de nivel cuesta el doble).
-const XP = { sesion: 10, serie: 0.5, km: 1.5, record: 15, campana: 50, partido: 8, gol: 2 };
+const XP = { sesion: 10, serie: 0.5, km: 1.5, record: 15, campana: 50, partido: 8, gol: 2, caminata: 0.75 };
 const RANKS = [
   { min: 0, name: 'Recluta', icon: '🛡' },
   { min: 150, name: 'Legionario', icon: '⚔' },
@@ -81,7 +81,7 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 /* ---------- Estado ---------- */
 const emptyState = () => ({
   v: 1, owner: null, updated: 0,
-  exercises: [], routine: {}, sessions: [], runs: [], matches: [], body: [], goals: [], profile: { name: '', share: true },
+  exercises: [], routine: {}, sessions: [], runs: [], matches: [], walks: [], body: [], goals: [], profile: { name: '', share: true },
   active: null, settings: { rest: 90 }
 });
 let state = emptyState();
@@ -157,6 +157,11 @@ function sanitizeState(raw) {
     if (!id || !date || goals == null || min == null) return null;
     return { id, date, goals: Math.round(goals), min: Math.round(min) };
   }).filter(Boolean);
+  d.walks = SAN.arr(raw.walks, 5000).map(w => {
+    const id = SAN.id(w?.id), date = SAN.date(w?.date), km = SAN.range(w?.km, 0.01, 100), pace = SAN.range(w?.pace, 1, 59);
+    if (!id || !date || km == null || pace == null) return null;
+    return { id, date, km, pace };
+  }).filter(Boolean);
   d.body = SAN.arr(raw.body, 5000).map(b => {
     const id = SAN.id(b?.id), date = SAN.date(b?.date), value = SAN.range(b?.value, 0, 1000);
     if (!id || !date || value == null || typeof b.type !== 'string' || !Object.hasOwn(MEASURES, b.type)) return null;
@@ -186,8 +191,8 @@ function cleanStats(s) {
     if (c++ >= 60) break; const name = SAN.str(k, 50), w = SAN.num(v, 0, 1000); if (name && w != null && name !== '__proto__') lifts[name] = w;
   }
   return { rank: SAN.str(s.rank, 20), tier: SAN.str(s.tier, 6), xp: n(s.xp), prs: n(s.prs, 1e5), streak: n(s.streak, 1e4), sessions30: n(s.sessions30, 1e3), km30: n(s.km30, 1e5),
-    goalsDone: n(s.goalsDone, 1e4), matches30: n(s.matches30, 1e3), goals30: n(s.goals30, 1e4), weeks: a8(s.weeks), wkm: a8(s.wkm), lifts,
-    runs: SAN.arr(s.runs, 10).map(cleanRun).filter(Boolean), matches: SAN.arr(s.matches, 10).map(cleanMatch).filter(Boolean) };
+    goalsDone: n(s.goalsDone, 1e4), matches30: n(s.matches30, 1e3), goals30: n(s.goals30, 1e4), walkKm30: n(s.walkKm30, 1e5), weeks: a8(s.weeks), wkm: a8(s.wkm), lifts,
+    runs: SAN.arr(s.runs, 10).map(cleanRun).filter(Boolean), matches: SAN.arr(s.matches, 10).map(cleanMatch).filter(Boolean), walks: SAN.arr(s.walks, 10).map(cleanWalk).filter(Boolean) };
 }
 
 function loadState() {
@@ -246,7 +251,7 @@ function countPRs() {
   }
   return n;
 }
-function trainingDates() { return new Set([...gameSessions().map(s => s.date), ...state.runs.map(r => r.date), ...state.matches.map(m => m.date)]); }
+function trainingDates() { return new Set([...gameSessions().map(s => s.date), ...state.runs.map(r => r.date), ...state.matches.map(m => m.date), ...state.walks.map(w => w.date)]); }
 function sessionsInWeek(ws) { return state.sessions.filter(s => s.date >= ws && s.date <= addDays(ws, 6)); }
 
 function xpInfo() {
@@ -255,7 +260,8 @@ function xpInfo() {
   const goalsDone = state.goals.filter(g => goalProgress(g).pct >= 1).length;
   const prs = countPRs();
   const goals = state.matches.reduce((a, m) => a + m.goals, 0);
-  const xp = Math.round(gs.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana + state.matches.length * XP.partido + goals * XP.gol);
+  const walkKm = state.walks.reduce((a, w) => a + w.km, 0);
+  const xp = Math.round(walkKm * XP.caminata + gs.length * XP.sesion + sets * XP.serie + km * XP.km + prs * XP.record + goalsDone * XP.campana + state.matches.length * XP.partido + goals * XP.gol);
   let i = RANKS.length - 1; while (i > 0 && xp < RANKS[i].min) i--;
   const cur = RANKS[i], nxt = RANKS[i + 1] || null;
   return { xp, rank: cur, roman: ROMAN[i], nextRoman: ROMAN[i + 1], next: nxt, pct: nxt ? (xp - cur.min) / (nxt.min - cur.min) : 1, prs, km, sets };
@@ -392,6 +398,12 @@ function cleanRun(r) {
   return { km, min, pace, date };
 }
 
+function cleanWalk(w) {
+  if (!w || typeof w !== 'object') return null;
+  const km = Number(w.km), pace = Number(w.pace), date = String(w.date || '');
+  if (!(km > 0 && km <= 100) || !(pace >= 1 && pace < 60) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+  return { km, pace, date };
+}
 function cleanMatch(m) {
   if (!m || typeof m !== 'object') return null;
   const goals = Number(m.goals), min = Number(m.min), date = String(m.date || '');
@@ -448,7 +460,7 @@ V.foro = () => {
     </div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
     <div class="glory"><span>${x.xp} pts</span>${x.next ? `<span class="falta">Faltan <b>${x.next.min - x.xp}</b> puntos</span><span>${x.next.min} pts</span>` : '<span class="falta">Alcanzaste el nivel máximo</span><span></span>'}</div>
-    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}), partido de fútbol (+${fmtN(XP.partido)}), gol (+${fmtN(XP.gol)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
+    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}) o caminado (+${fmtN(XP.caminata)}), partido de fútbol (+${fmtN(XP.partido)}), gol (+${fmtN(XP.gol)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
     <div class="muted small" style="margin-top:12px;font-style:italic">“${quote}”</div>
   </div>
   <h2>Esta semana</h2>
@@ -708,10 +720,22 @@ function goalForm(type = 'strength') {
 /* --- Correr --- */
 const fmtMin = m => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? ' ' + m % 60 + ' min' : ''}` : `${m} min`;
 V.correr = () => {
-  const fut = ui.runTab === 'futbol';
-  const seg = [['correr', 'Correr'], ['futbol', 'Fútbol']].map(([k, n]) => `<button class="${ui.runTab === k ? 'on' : ''}" data-act="rtab" data-t="${k}">${n}</button>`).join('');
-  return `<h1>${fut ? 'Fútbol' : 'Correr'}</h1><div class="seg" style="margin:0 0 14px">${seg}</div>` + (fut ? futbolView() : runView());
+  const T = [['correr', 'Correr'], ['caminata', 'Caminata'], ['futbol', 'Fútbol']], cur = T.find(t => t[0] === ui.runTab) || T[0];
+  const seg = T.map(([k, n]) => `<button class="${cur[0] === k ? 'on' : ''}" data-act="rtab" data-t="${k}">${n}</button>`).join('');
+  return `<h1>${cur[1]}</h1><div class="seg" style="margin:0 0 14px">${seg}</div>` + (cur[0] === 'futbol' ? futbolView() : cur[0] === 'caminata' ? walkView() : runView());
 };
+const walk2 = w => `<div class="run3 two"><div><b>${fmtN(w.km, 2)}</b><span>Kilómetros</span></div><div><b>${fmtTime(w.pace)}</b><span>Ritmo por km</span></div></div>`;
+function walkView() {
+  const ws = state.walks.slice().sort((a, b) => b.date.localeCompare(a.date));
+  const since = addDays(today(), -30), m = ws.filter(w => w.date >= since);
+  const km = m.reduce((a, w) => a + w.km, 0), pace = km ? m.reduce((a, w) => a + w.pace * w.km, 0) / km : 0;
+  return `<p class="sub">Registrá cada caminata con la distancia y el ritmo promedio por kilómetro. Suma gloria y tu rival la ve en la Arena.</p>
+  <button class="btn-primary btn-block" data-act="walk-new" style="margin-bottom:12px">+ Registrar caminata</button>
+  <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Caminatas</span></div><div class="card stat"><b>${pace ? fmtTime(pace) : '–'}</b><span>Ritmo medio</span></div></div>
+  ${ws.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="chw"></canvas></div></div>
+  <div class="card">${ws.slice(0, 50).map(w => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>
+    <button class="btn-sm icon-btn btn-danger" data-act="walk-del" data-id="${w.id}" aria-label="Eliminar caminata">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin caminatas registradas.</div>`}`;
+}
 function futbolView() {
   const ms = state.matches.slice().sort((a, b) => b.date.localeCompare(a.date) || 0);
   const goals = ms.reduce((a, m) => a + m.goals, 0), mins = ms.reduce((a, m) => a + m.min, 0);
@@ -735,6 +759,13 @@ function runView() {
     <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin carreras registradas.</div>`}`;
 }
 function afterCorrer() {
+  if (ui.runTab === 'caminata') {
+    if (!state.walks.length) return;
+    const ws0 = weekStart(today()), labels = [], kms = [];
+    for (let w = 11; w >= 0; w--) { const a = addDays(ws0, -7 * w); labels.push(fmtD(a)); kms.push(Math.round(state.walks.filter(x => x.date >= a && x.date <= addDays(a, 6)).reduce((q, x) => q + x.km, 0) * 10) / 10); }
+    drawChart('chw', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+    return;
+  }
   if (ui.runTab === 'futbol') {
     const ms = state.matches.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-15); if (!ms.length) return;
     drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [{ data: ms.map(m => m.goals), backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true, ticks: { precision: 0 } } } }) });
@@ -795,6 +826,7 @@ function sharedRuns() {
 }
 // Últimos partidos que se publican en la Arena (goles y minutos jugados).
 const sharedMatches = () => state.matches.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10).map(m => ({ date: m.date, goals: m.goals, min: m.min }));
+const sharedWalks = () => state.walks.slice().sort((a, b) => b.date.localeCompare(a.date)).slice(0, 10).map(w => ({ date: w.date, km: w.km, pace: w.pace }));
 function buildStats() {
   const t = today(), ws = weekStart(t), since = addDays(t, -30), x = xpInfo(), td = [...trainingDates()];
   const weeks = [], wkm = [];
@@ -806,12 +838,13 @@ function buildStats() {
   const lifts = {};
   for (const e of allEx()) { const b = bestWeight(e.id); if (b > 0) lifts[e.name] = b; }
   return {
-    v: 4, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
+    v: 5, rank: x.rank.name, tier: x.roman, xp: x.xp, prs: x.prs, streak: streakWeeks(),
     sessions30: td.filter(d => d >= since).length,
     km30: Math.round(state.runs.filter(r => r.date >= since).reduce((q, r) => q + r.km, 0) * 10) / 10,
     goalsDone: state.goals.filter(g => goalProgress(g).pct >= 1).length,
     matches30: state.matches.filter(m => m.date >= since).length, goals30: state.matches.filter(m => m.date >= since).reduce((q, m) => q + m.goals, 0),
-    weeks, wkm, lifts, runs: sharedRuns(), matches: sharedMatches()
+    walkKm30: Math.round(state.walks.filter(w => w.date >= since).reduce((q, w) => q + w.km, 0) * 10) / 10,
+    weeks, wkm, lifts, runs: sharedRuns(), matches: sharedMatches(), walks: sharedWalks()
   };
 }
 async function pushProfile() {
@@ -844,6 +877,11 @@ function rrunsHtml(rv) {
   if (!runs.length) return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró carreras.</div>`;
   return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card">${runs.map(r => `<div class="list-item" style="display:block"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>`).join('')}</div>`;
 }
+function rwalksHtml(rv) {
+  const ws = (Array.isArray(rv.stats?.walks) ? rv.stats.walks : []).map(cleanWalk).filter(Boolean);
+  if (!ws.length) return `<h2>Caminatas de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró caminatas.</div>`;
+  return `<h2>Caminatas de ${esc(rv.name)}</h2><div class="card">${ws.map(w => `<div class="list-item" style="display:block"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>`).join('')}</div>`;
+}
 function rmatchesHtml(rv) {
   const ms = (Array.isArray(rv.stats?.matches) ? rv.stats.matches : []).map(cleanMatch).filter(Boolean);
   if (!ms.length) return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró partidos.</div>`;
@@ -865,7 +903,7 @@ function renderArena() {
     <div class="grow"><b class="${r.me ? 'gold-t' : ''}">${esc(r.name)}</b><div class="muted small">${esc(r.tier)}</div></div><span class="tag ${r.me ? 'gold' : ''}">${r.xp} xp</span></div>`).join('')}</div>`;
   if (!rivals.length) { box.innerHTML = arenaMsg('Todavía no hay otros gladiadores.<br>Pedile a tu rival que cree su cuenta y active “Compartir mi progreso”.', '<br><br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
   const rv = rivals.find(r => r.user_id === ui.rivalId) || rivals[0], s = rv.stats || {};
-  const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)], ['Partidos · 30 días', me.matches30, N(s.matches30)], ['Goles · 30 días', me.goals30, N(s.goals30)],
+  const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)], ['Caminata · km 30 días', me.walkKm30, N(s.walkKm30), v => fmtN(v)], ['Partidos · 30 días', me.matches30, N(s.matches30)], ['Goles · 30 días', me.goals30, N(s.goals30)],
     ['Récords', me.prs, N(s.prs)], ['Semanas seguidas', me.streak, N(s.streak)], ['Campañas cumplidas', me.goalsDone, N(s.goalsDone)]];
   const wa = rows.filter(r => r[1] > r[2]).length, wb = rows.filter(r => r[2] > r[1]).length;
   const lifts = Object.keys(me.lifts).filter(n => s.lifts && s.lifts[n]).sort((a, b) => (me.lifts[b] + s.lifts[b]) - (me.lifts[a] + s.lifts[a])).slice(0, 10);
@@ -877,6 +915,7 @@ function renderArena() {
   <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><p class="muted small" style="margin:0">Kilómetros por semana</p><div class="chart-box"><canvas id="ch2"></canvas></div></div>
   ${rrunsHtml(rv)}
+  ${rwalksHtml(rv)}
   ${rmatchesHtml(rv)}
   <h2>Cargas máximas</h2>
   <div class="card">${lifts.length ? `<div class="lift head"><span>Ejercicio</span><span class="v">Tú</span><span class="v">${esc(rv.name).slice(0, 8)}</span></div>` + lifts.map(n => `<div class="lift"><span>${esc(n)}</span>
@@ -1058,7 +1097,20 @@ const ACTIONS = {
   },
 
   // progreso
-  rtab: el => { ui.runTab = el.dataset.t === 'futbol' ? 'futbol' : 'correr'; render(true); },
+  rtab: el => { ui.runTab = ['futbol', 'caminata'].includes(el.dataset.t) ? el.dataset.t : 'correr'; render(true); },
+  'walk-new': () => openModal(`<h2 style="margin-top:0">Registrar caminata</h2>
+    <label>Fecha</label><input id="w_d" type="date" value="${today()}">
+    <label>Distancia (km)</label><input id="w_k" type="text" inputmode="decimal" autocomplete="off" placeholder="Ej: 3,5">
+    <label>Ritmo promedio por km (min : seg)</label><div class="grid2"><input id="w_pm" type="number" inputmode="numeric" min="0" placeholder="min"><input id="w_ps" type="number" inputmode="numeric" min="0" max="59" placeholder="seg"></div>
+    <div class="row" style="margin-top:16px"><button class="btn-ghost grow" data-act="modal-close">Cancelar</button><button class="btn-primary grow" data-act="walk-save">Guardar</button></div>`),
+  'walk-save': () => {
+    const km = num(mv('w_k')), ps = num(mv('w_ps')) || 0, pace = (num(mv('w_pm')) || 0) + ps / 60;
+    if (!(km > 0) || !(pace > 0)) return toast('Completá la distancia y el ritmo promedio');
+    if (km > 100 || pace < 1 || pace >= 60 || ps > 59) return toast('Revisá los valores: parecen incorrectos');
+    state.walks.push({ id: uid(), date: SAN.date(mv('w_d')) || today(), km, pace: Math.round(pace * 1000) / 1000 });
+    save(); closeModal(); toast('Caminata registrada'); render(true);
+  },
+  'walk-del': el => { if (confirm('¿Eliminar esta caminata?')) { state.walks = state.walks.filter(w => w.id !== el.dataset.id); save(); render(true); } },
   'match-new': () => openModal(`<h2 style="margin-top:0">Registrar partido</h2>
     <label>Fecha</label><input id="m_d" type="date" value="${today()}">
     <label>Goles que hiciste</label><input id="m_g" type="number" inputmode="numeric" min="0" max="99" step="1" placeholder="Ej: 2">
@@ -1205,7 +1257,7 @@ document.addEventListener('change', ev => {
     f.text().then(t => {
       const d = JSON.parse(t); if (!d || typeof d !== 'object' || !Array.isArray(d.sessions)) throw new Error('formato');
       const clean = sanitizeState(d);
-      if (!confirm(`El respaldo tiene ${clean.sessions.length} entrenamientos, ${clean.runs.length} carreras, ${clean.matches.length} partidos y ${clean.goals.length} campañas. Esto reemplaza tus datos actuales. ¿Continuar?`)) return;
+      if (!confirm(`El respaldo tiene ${clean.sessions.length} entrenamientos, ${clean.runs.length} carreras, ${clean.walks.length} caminatas, ${clean.matches.length} partidos y ${clean.goals.length} campañas. Esto reemplaza tus datos actuales. ¿Continuar?`)) return;
       const owner = state.owner; state = clean; state.owner = owner; save(); toast('Respaldo restaurado'); render();
     }).catch(() => toast('Archivo de respaldo inválido')).finally(() => { el.value = ''; });
   }

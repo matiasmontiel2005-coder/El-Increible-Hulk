@@ -327,3 +327,5 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .ex-card { transition: padding .6s var(--out), margin .6s var(--out); }
 .ex-card.min { padding-top: 12px; padding-bottom: 12px; }
 @media (prefers-reduced-motion: reduce) { .ex-card, .ex-card .ex-body, .ex-card .ex-in, .ex-card .ex-del, .ex-card .ex-toggle .chev { transition: none !important; } }
+
+.run3.two { grid-template-columns: repeat(2, 1fr); }
