@@ -406,3 +406,13 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .legal b { color: var(--text); }
 .legal-note { margin: 18px auto 0; font-size: 13px; color: var(--muted); max-width: 34ch; line-height: 1.5; }
 .legal-note a { color: var(--g4); }
+
+/* Cifras agrupadas en una sola tarjeta, separadas por líneas finas */
+.statgrid { display: grid; padding: 0; overflow: hidden; }
+.statgrid.g3 { grid-template-columns: repeat(3, 1fr); }
+.statgrid.g2 { grid-template-columns: repeat(2, 1fr); }
+.statgrid .stat { padding: 16px 16px 15px; min-width: 0; }
+.statgrid .stat + .stat { border-left: 1px solid var(--line-soft); }
+.statgrid.g2 .stat:nth-child(3) { border-left: 0; }
+.statgrid.g2 .stat:nth-child(n+3) { border-top: 1px solid var(--line-soft); }
+.statgrid .stat b { font-size: 30px; }

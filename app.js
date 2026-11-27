@@ -539,10 +539,10 @@ V.foro = () => {
       : (todayR?.items?.length ? `<div class="row between"><div><h3>Hoy: ${esc(todayR.name || DAYS[dIdx])}</h3><div class="muted small">${todayR.items.length} ejercicios en tu rutina</div></div><button class="btn-primary" data-act="start-day" data-day="${dIdx}">Entrenar</button></div>`
         : `<div class="row between"><div><h3>Hoy: ${DAYS[dIdx]}</h3><div class="muted small">${Object.values(state.routine).some(r => r.items?.length) ? 'Día de descanso. El guerrero también repone fuerzas.' : 'Todavía no armaste tu rutina.'}</div></div><a href="#/rutina" class="btn" style="text-decoration:none">${Object.values(state.routine).some(r => r.items?.length) ? 'Ver rutina' : 'Armar rutina'}</a></div>`)}
   </div>
-  <div class="grid3">
-    <div class="card stat"><b>${monthSessions}</b><span>Sesiones del mes</span></div>
-    <div class="card stat"><b>${fmtN(monthKm)}</b><span>Km del mes</span></div>
-    <div class="card stat"><b>${x.prs}</b><span>Récords</span></div>
+  <div class="card statgrid g3">
+    <div class="stat"><b>${monthSessions}</b><span>Sesiones del mes</span></div>
+    <div class="stat"><b>${fmtN(monthKm)}</b><span>Km del mes</span></div>
+    <div class="stat"><b>${x.prs}</b><span>Récords</span></div>
   </div>
   <h2>Campañas</h2>
   ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><b>Sin campañas activas</b>Una campaña es un objetivo con fecha: un peso, una distancia o una constancia.<br><a href="#/metas" class="btn btn-gold" style="text-decoration:none;display:inline-block">Crear campaña</a></div>`}
@@ -684,7 +684,7 @@ V.progreso = () => {
   const seg = [['fuerza', 'Fuerza'], ['cuerpo', 'Cuerpo'], ['constancia', 'Constancia']]
     .map(([k, n]) => `<button class="${ui.progTab === k ? 'on' : ''}" data-act="ptab" data-t="${k}">${n}</button>`).join('');
   const jd = ui.justDone && state.sessions.find(x => x.id === ui.justDone);
-  return `<h1>Progreso</h1><p class="sub">Tus gráficos se actualizan solos con cada registro.</p>${jd ? `<div class="card gold share-cta"><div class="grow"><h3>Entrenamiento terminado</h3><div class="muted small">Compartilo como imagen con tu resumen y tus récords.</div></div><button class="btn-primary btn-sm" data-act="share-open" data-id="${jd.id}">Compartir</button><button class="btn-ghost icon-btn" data-act="share-dismiss" aria-label="Cerrar aviso">✕</button></div>` : ''}<div class="seg" style="margin-bottom:14px">${seg}</div>${V['prog_' + ui.progTab]()}`;
+  return `<h1>Progreso</h1><p class="sub">Se actualiza solo con cada registro.</p>${jd ? `<div class="card gold share-cta"><div class="grow"><h3>Entrenamiento terminado</h3><div class="muted small">Compartilo como imagen con tu resumen y tus récords.</div></div><button class="btn-primary btn-sm" data-act="share-open" data-id="${jd.id}">Compartir</button><button class="btn-ghost icon-btn" data-act="share-dismiss" aria-label="Cerrar aviso">✕</button></div>` : ''}<div class="seg" style="margin-bottom:14px">${seg}</div>${V['prog_' + ui.progTab]()}`;
 };
 V.prog_fuerza = () => {
   const withHist = allEx().filter(e => exHistory(e.id).length);
@@ -696,11 +696,11 @@ V.prog_fuerza = () => {
   const first = h[0].best;
   return `
   <select data-in="progex">${withHist.map(e => `<option value="${e.id}" ${e.id === ui.exId ? 'selected' : ''}>${esc(e.name)}</option>`).join('')}</select>
-  <div class="grid2" style="margin-top:12px">
-    <div class="card stat"><b>${fmtN(best)}</b><span>Peso máximo (kg)</span></div>
-    <div class="card stat"><b>${bestRepsAtMax}</b><span>Reps con ese peso</span></div>
-    <div class="card stat"><b>${h.length}</b><span>Sesiones</span></div>
-    <div class="card stat"><b class="${best >= first ? 'ok-t' : ''}">${best - first >= 0 ? '+' : ''}${fmtN(best - first)}</b><span>Desde el inicio</span></div>
+  <div class="card statgrid g2" style="margin-top:12px">
+    <div class="stat"><b>${fmtN(best)}</b><span>Peso máximo (kg)</span></div>
+    <div class="stat"><b>${bestRepsAtMax}</b><span>Reps con ese peso</span></div>
+    <div class="stat"><b>${h.length}</b><span>Sesiones</span></div>
+    <div class="stat"><b class="${best >= first ? 'ok-t' : ''}">${best - first >= 0 ? '+' : ''}${fmtN(best - first)}</b><span>Desde el inicio</span></div>
   </div>
   <div class="card"><h3>Peso máximo por sesión</h3><p class="chart-note">En kilos. Tocá el gráfico para ver con cuántas repeticiones lo hiciste.</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Repeticiones con ese peso</h3><p class="chart-note">Cuántas repeticiones hiciste con el peso máximo de cada sesión.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>
@@ -728,9 +728,9 @@ V.prog_constancia = () => {
   const streak = streakWeeks();
   const total = state.sessions.length;
   const vol = state.sessions.reduce((a, s) => a + s.entries.reduce((b, e) => b + e.sets.filter(x => x.done || true).reduce((c, x) => c + (x.w || 0) * (x.r || 0), 0), 0), 0);
-  return `<div class="grid3"><div class="card stat"><b>${total}</b><span>Sesiones</span></div>
-  <div class="card stat"><b>${streak}</b><span>Semanas seguidas</span></div>
-  <div class="card stat"><b>${vol >= 1000 ? fmtN(vol / 1000) + 't' : Math.round(vol)}</b><span>Volumen total${vol >= 1000 ? '' : ' kg'}</span></div></div>
+  return `<div class="card statgrid g3"><div class="stat"><b>${total}</b><span>Sesiones</span></div>
+  <div class="stat"><b>${streak}</b><span>Semanas seguidas</span></div>
+  <div class="stat"><b>${vol >= 1000 ? fmtN(vol / 1000) + 't' : Math.round(vol)}</b><span>Volumen total${vol >= 1000 ? '' : ' kg'}</span></div></div>
   <div class="card"><h3>Actividades por semana</h3><p class="chart-note">Últimas 12 semanas, por tipo de actividad.</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Kilos levantados por semana</h3><p class="chart-note">Suma de peso × repeticiones de todas tus series.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>`;
 };
@@ -801,9 +801,9 @@ function walkView() {
   const ws = state.walks.slice().sort((a, b) => b.date.localeCompare(a.date));
   const since = addDays(today(), -30), m = ws.filter(w => w.date >= since);
   const km = m.reduce((a, w) => a + w.km, 0), pace = km ? m.reduce((a, w) => a + w.pace * w.km, 0) / km : 0;
-  return `<p class="sub">Registrá cada caminata con la distancia y el ritmo promedio por kilómetro. Suma gloria y tu rival la ve en la Arena.</p>
+  return `<p class="sub">Distancia y ritmo promedio de cada caminata.</p>
   <button class="btn-primary btn-block" data-act="walk-new" style="margin-bottom:12px">+ Registrar caminata</button>
-  <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Caminatas</span></div><div class="card stat"><b>${pace ? fmtTime(pace) : '–'}</b><span>Ritmo medio</span></div></div>
+  <div class="card statgrid g3"><div class="stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="stat"><b>${m.length}</b><span>Caminatas</span></div><div class="stat"><b>${pace ? fmtTime(pace) : '–'}</b><span>Ritmo medio</span></div></div>
   ${ws.length ? `<div class="card"><h3>Kilómetros caminados por semana</h3><p class="chart-note">Últimas 12 semanas.</p><div class="chart-box sm"><canvas id="chw"></canvas></div></div>
   <div class="card">${ws.slice(0, 50).map(w => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>
     <button class="btn-sm icon-btn btn-danger" data-act="walk-del" data-id="${w.id}" aria-label="Eliminar caminata">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin caminatas registradas</b>Tocá “Registrar caminata” para cargar la primera.</div>`}`;
@@ -811,9 +811,9 @@ function walkView() {
 function futbolView() {
   const ms = state.matches.slice().sort((a, b) => b.date.localeCompare(a.date) || 0);
   const goals = ms.reduce((a, m) => a + m.goals, 0), mins = ms.reduce((a, m) => a + m.min, 0);
-  return `<p class="sub">Cargá cada partido: los goles que hiciste y los minutos que jugaste. Suman gloria y tu rival los ve en la Arena.</p>
+  return `<p class="sub">Goles y minutos jugados en cada partido.</p>
   <button class="btn-primary btn-block" data-act="match-new" style="margin-bottom:12px">+ Registrar partido</button>
-  <div class="grid3"><div class="card stat"><b>${ms.length}</b><span>Partidos</span></div><div class="card stat"><b>${goals}</b><span>Goles</span></div><div class="card stat"><b>${mins}</b><span>Minutos</span></div></div>
+  <div class="card statgrid g3"><div class="stat"><b>${ms.length}</b><span>Partidos</span></div><div class="stat"><b>${goals}</b><span>Goles</span></div><div class="stat"><b>${mins}</b><span>Minutos</span></div></div>
   ${ms.length ? `<div class="card"><h3>Goles por partido</h3><p class="chart-note">Tus últimos 15 partidos.</p><div class="chart-box sm"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
   <div class="card">${ms.slice(0, 50).map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="match-del" data-id="${m.id}" aria-label="Eliminar partido">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin partidos registrados</b>Tocá “Registrar partido” para cargar el primero.</div>`}`;
@@ -822,9 +822,9 @@ function runView() {
   const runs = state.runs.slice().sort((a, b) => b.date.localeCompare(a.date));
   const since = addDays(today(), -30), m = runs.filter(r => r.date >= since);
   const km = m.reduce((a, r) => a + r.km, 0), paceW = km ? m.reduce((a, r) => a + runPace(r) * r.km, 0) / km : 0;
-  return `<p class="sub">Registrá cada carrera con tres datos: kilómetros, duración y ritmo promedio por kilómetro. Tu rival puede verlos en la Arena.</p>
+  return `<p class="sub">Kilómetros, duración y ritmo de cada salida.</p>
   <button class="btn-primary btn-block" data-act="run-new" style="margin-bottom:12px">+ Registrar carrera</button>
-  <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Salidas</span></div><div class="card stat"><b>${paceW ? fmtTime(paceW) : '–'}</b><span>Ritmo medio</span></div></div>
+  <div class="card statgrid g3"><div class="stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="stat"><b>${m.length}</b><span>Salidas</span></div><div class="stat"><b>${paceW ? fmtTime(paceW) : '–'}</b><span>Ritmo medio</span></div></div>
   ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><p class="chart-note">Últimas 12 semanas.</p><div class="chart-box sm"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Ritmo por salida</h3><p class="chart-note">Minutos por kilómetro. Más arriba es más rápido.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>` : ''}
   ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>
@@ -967,7 +967,7 @@ async function pushProfile() {
     if (error) throw error;
   } catch (e) { dbg('profile', e); }
 }
-V.arena = () => `<h1>Arena</h1><p class="sub">Medite tu fuerza contra la de otro gladiador. Cada uno tiene su cuenta y sus datos privados; solo se comparte un resumen.</p>
+V.arena = () => `<h1>Arena</h1><p class="sub">Medite con otros gladiadores. Solo se comparte un resumen; tus datos siguen siendo privados.</p>
   <div id="arena"><div class="card empty">Cargando la arena…</div></div>`;
 function groupCard() {
   const g = state.profile?.grupo;
@@ -1074,7 +1074,7 @@ function render(keepScroll = false) {
   Motion.setNav(name, TABS); Motion.enter(view, !keepScroll, { dir, slide });
   if (ghost) Motion.leave(ghost, dir);
   if (!keepScroll && ui.lastRoute !== name) { Motion.sweep(); ui.lastRoute = name; }
-  const x = xpInfo(); $('#rankChip').textContent = `${x.roman} · ${x.rank.name}`;
+  const x = xpInfo(), chip = $('#rankChip'); chip.textContent = `${x.roman} · ${x.rank.name}`; chip.setAttribute('aria-label', `Tu rango: ${x.rank.name}`); chip.classList.toggle('hidden', name === 'foro');
   if (name === 'progreso') afterProgreso();
   if (name === 'correr') afterCorrer();
   if (name === 'arena') afterArena();
