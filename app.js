@@ -800,16 +800,21 @@ V.ajustes = () => `
   <p class="muted small center" style="margin-top:20px">Imperium Gladiador · v1</p>`;
 
 /* --- Auth --- */
-V.auth = () => `<div class="auth"><img class="crest-img" src="icons/icon-192.png" alt="Imperium" width="88" height="88"><h1>IMPERIUM</h1><p class="sub">Entrá al Coliseo. Tu legión te espera.</p>
-  <div class="card gold"><form id="authform" autocomplete="on">
-    <label style="margin-top:0">Email</label><input id="a_e" type="email" autocomplete="email" required>
-    <label>Contraseña</label><input id="a_p" type="password" autocomplete="current-password" minlength="6" required>
-    <label>Nombre de gladiador (al crear cuenta)</label><input id="a_n" maxlength="24" autocomplete="nickname" placeholder="Cómo te verán en la Arena">
-    <div class="err" id="a_err"></div>
-    <button class="btn-primary btn-block" type="submit" data-act="login" style="margin-top:6px">Entrar</button>
-    <button class="btn-block" type="button" data-act="signup" style="margin-top:8px">Crear cuenta</button>
+V.auth = () => {
+  const up = ui.authMode === 'signup';
+  return `<div class="auth"><img class="crest-img" src="icons/icon-192.png" alt="Imperium" width="88" height="88"><h1>IMPERIUM</h1>
+  <p class="auth-lead">Registrá cada serie, mirá cómo progresás y medite con un rival.</p>
+  <div class="card auth-card"><div class="seg" role="tablist" style="margin-bottom:6px"><button type="button" role="tab" aria-selected="${!up}" class="${up ? '' : 'on'}" data-act="auth-mode" data-m="login">Entrar</button><button type="button" role="tab" aria-selected="${up}" class="${up ? 'on' : ''}" data-act="auth-mode" data-m="signup">Crear cuenta</button></div>
+  <form id="authform" autocomplete="on">
+    ${up ? '<label>Nombre de gladiador</label><input id="a_n" maxlength="24" autocomplete="nickname" placeholder="Cómo te verán en la Arena">' : ''}
+    <label>Email</label><input id="a_e" type="email" autocomplete="email" required>
+    <label>Contraseña</label><input id="a_p" type="password" autocomplete="${up ? 'new-password' : 'current-password'}" minlength="6" required>
+    ${up ? '<p class="hint" style="margin:8px 0 0">Al menos 8 caracteres, con letras y números.</p>' : ''}
+    <div class="err" id="a_err" role="status"></div>
+    <button class="btn-primary btn-block" type="submit" data-act="${up ? 'signup' : 'login'}" style="margin-top:4px">${up ? 'Crear cuenta' : 'Entrar'}</button>
   </form></div>
-  <button class="btn-ghost btn-block" data-act="local-mode">Usar sin cuenta (solo este dispositivo)</button></div>`;
+  <button class="btn-ghost btn-block auth-local" data-act="local-mode">Usar sin cuenta, solo en este dispositivo</button></div>`;
+};
 
 
 /* --- Arena: comparar progreso entre cuentas independientes --- */
@@ -891,7 +896,7 @@ function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
   const tot = a + b, pa = tot ? a / tot * 100 : 50, pb = tot ? b / tot * 100 : 50;
   const lead = a > b ? 'a' : b > a ? 'b' : '';
   return `<div class="duel"><div class="duel-h"><span class="${lead === 'a' ? 'gold-t' : ''}">${fmt(a)}</span><span class="muted">${label}</span><span class="${lead === 'b' ? 'rival-t' : ''}">${fmt(b)}</span></div>
-    <div class="duel-bar"><i style="width:${pa}%"></i><i class="r" style="width:${pb}%"></i></div></div>`;
+    <div class="duel-bar${tot ? '' : ' z'}"><i style="width:${pa}%"></i><i class="r" style="width:${pb}%"></i></div></div>`;
 }
 function renderArena() {
   const box = $('#arena'); if (!box || route() !== 'arena') return;
@@ -1168,6 +1173,7 @@ const ACTIONS = {
   'run-del': el => { if (confirm('¿Eliminar esta carrera?')) { state.runs = state.runs.filter(r => r.id !== el.dataset.id); save(); render(true); } },
   'sync-now': async () => { setSyncBadge('pend'); await pushRemote(); toast(ui.sync === 'ok' ? 'Sincronizado' : 'No se pudo sincronizar'); },
   logout: async () => { await sb.auth.signOut(); user = null; localStorage.removeItem(LS_LOCAL); state = emptyState(); save(false); location.hash = '#/foro'; render(); },
+  'auth-mode': el => { const e = val('a_e'), p = val('a_p'); ui.authMode = el.dataset.m; render(true); const a = $('#a_e'), b = $('#a_p'); if (a && e) a.value = e; if (b && p) b.value = p; },
   'goto-auth': () => { location.hash = '#/auth'; render(); },
   'local-mode': () => { localStorage.setItem(LS_LOCAL, '1'); location.hash = '#/foro'; render(); },
   export: () => {

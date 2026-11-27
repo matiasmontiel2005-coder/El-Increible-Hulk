@@ -355,3 +355,14 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .hist-m { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .row > button, .row > .btn, .list-item > button { white-space: nowrap; flex: none; }
 .row > button.grow { flex: 1; }
+
+/* Acceso */
+.auth { padding-top: 2vh; }
+.auth .crest-img { width: 96px; height: 96px; border-radius: 24px; }
+.auth-lead { color: var(--muted); font-size: 15px; line-height: 1.5; margin: 10px auto 26px; max-width: 30ch; }
+.auth-card { text-align: left; padding: 16px 18px 20px; }
+.auth-card label:first-of-type { margin-top: 14px; }
+.auth-local { margin-top: 6px; border-color: transparent; font-size: 14px; }
+.set .n, .srow .n { font-family: var(--num); font-stretch: 85%; font-weight: 600; }
+.duel-bar.z i { background: var(--line); }
+.rank-row .pos { font-family: var(--num); font-stretch: 85%; font-weight: 650; font-size: 17px; text-align: center; }
