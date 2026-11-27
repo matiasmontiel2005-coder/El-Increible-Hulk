@@ -353,8 +353,7 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .hist-date b { display: block; font-family: var(--num); font-stretch: 78%; font-weight: 650; font-size: 24px; color: var(--text); }
 .hist-t { display: block; font-weight: 620; font-size: 15.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hist-m { display: block; margin-top: 3px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
-.row > button, .row > .btn, .list-item > button { white-space: nowrap; flex: none; }
-.row > button.grow { flex: 1; }
+:where(.row, .list-item) > :where(button, .btn) { white-space: nowrap; flex: none; }
 
 /* Acceso */
 .auth { padding-top: 2vh; }
@@ -366,3 +365,4 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .set .n, .srow .n { font-family: var(--num); font-stretch: 85%; font-weight: 600; }
 .duel-bar.z i { background: var(--line); }
 .rank-row .pos { font-family: var(--num); font-stretch: 85%; font-weight: 650; font-size: 17px; text-align: center; }
+@media (max-width: 380px) { .brand { letter-spacing: .22em; gap: 8px; } .rank-chip { padding: 6px 10px; } }
