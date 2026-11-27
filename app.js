@@ -70,6 +70,7 @@ const addDays = (s, n) => { const d = pd(s); d.setDate(d.getDate() + n); return 
 const dow = s => (pd(s).getDay() + 6) % 7;
 const weekStart = s => addDays(s, -dow(s));
 const diffDays = (a, b) => Math.round((pd(b) - pd(a)) / 864e5);
+const MES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
 const fmtD = s => { const d = pd(s); const o = { day: 'numeric', month: 'short' }; if (d.getFullYear() !== new Date().getFullYear()) o.year = '2-digit'; return d.toLocaleDateString('es-AR', o); };
 const dv = v => v == null || v === '' ? '' : String(v).replace('.', ',');
 const num = v => { const n = parseFloat(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? n : null; };
@@ -340,11 +341,11 @@ function chartBase(extra = {}) {
   return Object.assign({
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
-    scales: { x: { grid: { color: '#2e2e2e' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: false } }
+    scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: GRID }, beginAtZero: false } }
   }, extra);
 }
 // Paleta de los gráficos (la misma de la interfaz)
-const ORANGE = '#FF5C22', RUST = '#A74B2E', LGRAY = '#D3D3D3';
+const ORANGE = '#FF5C22', RUST = '#A74B2E', LGRAY = '#D3D3D3', GRID = '#232323';
 function lineDs(label, data, color = ORANGE, fill = true) {
   return { label, data, borderColor: color, backgroundColor: color + '33', pointBackgroundColor: color, tension: .25, fill, pointRadius: 3, borderWidth: 2 };
 }
@@ -460,8 +461,8 @@ V.foro = () => {
     </div>
     <div class="bar"><i style="width:${Math.round(x.pct * 100)}%"></i></div>
     <div class="glory"><span>${x.xp} pts</span>${x.next ? `<span class="falta">Faltan <b>${x.next.min - x.xp}</b> puntos</span><span>${x.next.min} pts</span>` : '<span class="falta">Alcanzaste el nivel máximo</span><span></span>'}</div>
-    <p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}) o caminado (+${fmtN(XP.caminata)}), partido de fútbol (+${fmtN(XP.partido)}), gol (+${fmtN(XP.gol)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p>
-    <div class="muted small" style="margin-top:12px;font-style:italic">“${quote}”</div>
+    <details><summary>¿Cómo sumo gloria?</summary><p class="how">${x.next ? `Sumás gloria con cada entreno (+${fmtN(XP.sesion)}), serie (+${fmtN(XP.serie)}), kilómetro corrido (+${fmtN(XP.km)}) o caminado (+${fmtN(XP.caminata)}), partido de fútbol (+${fmtN(XP.partido)}), gol (+${fmtN(XP.gol)}), récord (+${fmtN(XP.record)}) y campaña cumplida (+${fmtN(XP.campana)}).` : 'Sos un Emperador. Mantené el ritmo.'}</p></details>
+    <div class="quote">“${quote}”</div>
   </div>
   <h2>Esta semana</h2>
   <div class="week">${week}</div>
@@ -476,7 +477,7 @@ V.foro = () => {
     <div class="card stat"><b>${x.prs}</b><span>Récords</span></div>
   </div>
   <h2>Campañas</h2>
-  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><span class="big">···</span>Sin campañas activas.<br><a href="#/metas" class="gold-t">Fijá tu primer objetivo</a></div>`}
+  ${goals.length ? goals.map(({ g, p }) => goalCard(g, p, true)).join('') : `<div class="card empty"><b>Sin campañas activas</b>Una campaña es un objetivo con fecha: un peso, una distancia o una constancia.<br><a href="#/metas" class="btn btn-gold" style="text-decoration:none;display:inline-block">Crear campaña</a></div>`}
   ${backupCard}`;
 };
 
@@ -523,7 +524,7 @@ V.rutina = () => {
       <input type="text" inputmode="decimal" autocomplete="off" data-in="rt" data-id="${it.id}" data-s="${si}" data-f="w" value="${dv(t.w)}" placeholder="kg" aria-label="Peso de la serie ${si + 1}"></div>`).join('')}
     <div class="row" style="margin-top:4px"><button class="btn-sm" data-act="rset-add" data-id="${it.id}" ${it.sets.length >= 20 ? 'disabled' : ''}>+ Serie</button>
       <button class="btn-sm btn-ghost" data-act="rset-del" data-id="${it.id}" ${it.sets.length <= 1 ? 'disabled' : ''}>− Serie</button></div>
-  </div>`).join('') : `<div class="card empty"><span class="big">···</span>${DAYS[d]} está vacío.<br>Agregá ejercicios o dejalo como día de descanso.</div>`}
+  </div>`).join('') : `<div class="card empty"><b>${DAYS[d]} está vacío</b>Agregá ejercicios o dejalo como día de descanso.</div>`}
   <button class="btn-primary btn-block" data-act="radd">+ Añadir ejercicio</button>
   ${r.items.length ? `<button class="btn-block" style="margin-top:10px" data-act="start-day" data-day="${d}">Entrenar este día ahora</button>
   <button class="btn-block btn-ghost" style="margin-top:10px" data-act="rcopy">Copiar este día a otro…</button>` : ''}`;
@@ -534,7 +535,7 @@ V.entrenar = () => state.active ? liveView() : startView();
 function startView() {
   const d = ui.startDay ?? dow(today());
   const opts = DAYS.map((n, i) => `<option value="${i}" ${i === d ? 'selected' : ''}>${n}${state.routine[i]?.name ? ' — ' + esc(state.routine[i].name) : ''}${state.routine[i]?.items?.length ? '' : ' (vacío)'}</option>`).join('');
-  const recent = sessionsSorted().reverse().slice(0, 12);
+  const all = sessionsSorted().reverse(), recent = all.slice(0, ui.histN || 6);
   return `
   <h1>Entrenar</h1><p class="sub">Registrá cada serie en vivo, con descanso cronometrado.</p>
   <div class="card gold">
@@ -547,12 +548,11 @@ function startView() {
   ${recent.length ? `<div class="card">${recent.map(s => {
     const sets = s.entries.reduce((a, e) => a + e.sets.length, 0);
     const vol = s.entries.reduce((a, e) => a + e.sets.reduce((b, x) => b + (x.w || 0) * (x.r || 0), 0), 0);
-    return `<div class="list-item"><div class="grow"><b>${esc(s.name)}</b>${s.prs?.length ? `<span class="pr">${s.prs.length} PR</span>` : ''}
-      <div class="muted small">${fmtD(s.date)} · ${s.entries.length} ejercicios · ${sets} series · ${Math.round(vol)} kg volumen${s.dur ? ' · ' + s.dur + ' min' : ''}</div></div>
-      <button class="btn-sm icon-btn" data-act="sess-view" data-id="${s.id}">Ver</button>
-      <button class="btn-sm icon-btn" data-act="sess-reopen" data-id="${s.id}" aria-label="Reabrir y editar">Editar</button>
-      <button class="btn-sm icon-btn btn-danger" data-act="sess-del" data-id="${s.id}">✕</button></div>`;
-  }).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Aún no hay batallas registradas.</div>`}`;
+    return `<div class="list-item hist"><button class="hist-main" data-act="sess-view" data-id="${s.id}"><span class="hist-date"><b>${+s.date.slice(8)}</b>${MES[+s.date.slice(5, 7) - 1]}</span>
+      <span class="grow"><span class="hist-t">${esc(s.name)}${s.prs?.length ? `<span class="pr">${s.prs.length} PR</span>` : ''}</span>
+      <span class="hist-m">${sets} series · ${fmtN(Math.round(vol))} kg${s.dur ? ' · ' + s.dur + ' min' : ''}</span></span></button>
+      <button class="btn-sm" data-act="sess-reopen" data-id="${s.id}" aria-label="Reabrir y editar ${esc(s.name)}">Editar</button></div>`;
+  }).join('')}${all.length > recent.length ? `<button class="btn-block btn-ghost" style="margin-top:12px" data-act="hist-more">Ver ${Math.min(all.length - recent.length, 20)} más</button>` : ''}</div>` : `<div class="card empty"><b>Todavía no hay entrenamientos</b>Cuando termines el primero, aparece acá con sus series y su volumen.</div>`}`;
 }
 // Ejercicios minimizados en la sesión en curso: por defecto queda abierto solo el primero sin terminar.
 function liveMin(a) {
@@ -619,7 +619,7 @@ V.progreso = () => {
 };
 V.prog_fuerza = () => {
   const withHist = allEx().filter(e => exHistory(e.id).length);
-  if (!withHist.length) return `<div class="card empty"><span class="big">···</span>Todavía no hay datos de fuerza.<br>Completá series en <a class="gold-t" href="#/entrenar">Entrenar</a> y acá aparecerá tu evolución.</div>`;
+  if (!withHist.length) return `<div class="card empty"><b>Todavía no hay datos de fuerza</b>Completá series en un entrenamiento y acá vas a ver cómo evoluciona cada ejercicio.<br><a class="btn btn-gold" style="text-decoration:none;display:inline-block" href="#/entrenar">Ir a Entrenar</a></div>`;
   if (!ui.exId || !withHist.some(e => e.id === ui.exId)) ui.exId = withHist[0].id;
   const h = exHistory(ui.exId);
   const best = Math.max(...h.map(x => x.best));
@@ -652,7 +652,7 @@ V.prog_cuerpo = () => {
   ${list.length ? `<div class="card"><h3>${m.name}</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card">${list.slice().reverse().slice(0, 12).map(b => `<div class="list-item"><div class="grow"><b>${fmtN(b.value)} ${m.unit}</b><div class="muted small">${fmtD(b.date)}</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="body-del" data-id="${b.id}">✕</button></div>`).join('')}</div>`
-    : `<div class="card empty"><span class="big">···</span>Sin registros de ${m.name.toLowerCase()}.</div>`}`;
+    : `<div class="card empty"><b>Sin registros de ${m.name.toLowerCase()}</b>Cargá la primera medida arriba para empezar el gráfico.</div>`}`;
 };
 V.prog_constancia = () => {
   const t = today(), ws = weekStart(t);
@@ -669,8 +669,8 @@ function afterProgreso() {
   if (ui.progTab === 'fuerza' && ui.exId) {
     const h = exHistory(ui.exId); if (!h.length) return;
     const labels = h.map(x => fmtD(x.date));
-    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), { ...lineDs('Reps con ese peso', h.map(x => x.bestReps), '#FFFFFF', false), yAxisID: 'y2', borderDash: [5, 4] }, lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { grid: { color: '#2e2e2e' }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: false }, y2: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }) });
-    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RUST, borderColor: ORANGE, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), { ...lineDs('Reps con ese peso', h.map(x => x.bestReps), '#FFFFFF', false), yAxisID: 'y2', borderDash: [5, 4] }, lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: GRID }, beginAtZero: false }, y2: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }) });
+    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RUST, borderColor: ORANGE, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
   } else if (ui.progTab === 'cuerpo') {
     const list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date));
     if (list.length) drawChart('ch1', { type: 'line', data: { labels: list.map(b => fmtD(b.date)), datasets: [lineDs(MEASURES[ui.bodyType].name, list.map(b => b.value))] }, options: chartBase() });
@@ -682,9 +682,9 @@ function afterProgreso() {
       gym.push(ss.length); run.push(state.runs.filter(x => x.date >= s && x.date <= e).length);
       vol.push(Math.round(ss.reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((c, y) => c + (y.w || 0) * (y.r || 0), 0), 0), 0)));
     }
-    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: '#2e2e2e' } }, y: { stacked: true, grid: { color: '#2e2e2e' }, ticks: { precision: 0 }, beginAtZero: true } } });
+    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: GRID } }, y: { stacked: true, grid: { color: GRID }, ticks: { precision: 0 }, beginAtZero: true } } });
     drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ label: 'Gimnasio', data: gym, backgroundColor: RUST, borderRadius: 4 }, { label: 'Running', data: run, backgroundColor: ORANGE, borderRadius: 4 }] }, options: opt });
-    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
   }
 }
 
@@ -695,7 +695,7 @@ V.metas = () => {
   items.sort((a, b) => order[a.p.status] - order[b.p.status] || a.g.deadline.localeCompare(b.g.deadline));
   return `<h1>Campañas</h1><p class="sub">Objetivos con meta y fecha límite. El progreso se calcula solo con tus entrenos.</p>
   <button class="btn-primary btn-block" data-act="goal-new" style="margin-bottom:14px">+ Nueva campaña</button>
-  ${items.length ? items.map(({ g, p }) => goalCard(g, p)).join('') : `<div class="card empty"><span class="big">···</span>No hay campañas. Un guerrero sin objetivo es un turista.</div>`}`;
+  ${items.length ? items.map(({ g, p }) => goalCard(g, p)).join('') : `<div class="card empty"><b>No hay campañas</b>Un guerrero sin objetivo es un turista. Fijá una meta con fecha límite y el progreso se calcula solo.</div>`}`;
 };
 function goalForm(type = 'strength') {
   const tabs = [['strength', 'Fuerza'], ['body', 'Cuerpo'], ['run', 'Running'], ['habit', 'Constancia']]
@@ -734,7 +734,7 @@ function walkView() {
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Caminatas</span></div><div class="card stat"><b>${pace ? fmtTime(pace) : '–'}</b><span>Ritmo medio</span></div></div>
   ${ws.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="chw"></canvas></div></div>
   <div class="card">${ws.slice(0, 50).map(w => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>
-    <button class="btn-sm icon-btn btn-danger" data-act="walk-del" data-id="${w.id}" aria-label="Eliminar caminata">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin caminatas registradas.</div>`}`;
+    <button class="btn-sm icon-btn btn-danger" data-act="walk-del" data-id="${w.id}" aria-label="Eliminar caminata">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin caminatas registradas</b>Tocá “Registrar caminata” para cargar la primera.</div>`}`;
 }
 function futbolView() {
   const ms = state.matches.slice().sort((a, b) => b.date.localeCompare(a.date) || 0);
@@ -744,7 +744,7 @@ function futbolView() {
   <div class="grid3"><div class="card stat"><b>${ms.length}</b><span>Partidos</span></div><div class="card stat"><b>${goals}</b><span>Goles</span></div><div class="card stat"><b>${mins}</b><span>Minutos</span></div></div>
   ${ms.length ? `<div class="card"><h3>Goles por partido</h3><div class="chart-box"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
   <div class="card">${ms.slice(0, 50).map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div>
-    <button class="btn-sm icon-btn btn-danger" data-act="match-del" data-id="${m.id}" aria-label="Eliminar partido">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin partidos registrados.</div>`}`;
+    <button class="btn-sm icon-btn btn-danger" data-act="match-del" data-id="${m.id}" aria-label="Eliminar partido">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin partidos registrados</b>Tocá “Registrar partido” para cargar el primero.</div>`}`;
 }
 function runView() {
   const runs = state.runs.slice().sort((a, b) => b.date.localeCompare(a.date));
@@ -756,27 +756,27 @@ function runView() {
   ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card"><h3>Ritmo por salida (min/km)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>` : ''}
   ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>
-    <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><span class="big">···</span>Sin carreras registradas.</div>`}`;
+    <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin carreras registradas</b>Tocá “Registrar carrera” para cargar la primera.</div>`}`;
 }
 function afterCorrer() {
   if (ui.runTab === 'caminata') {
     if (!state.walks.length) return;
     const ws0 = weekStart(today()), labels = [], kms = [];
     for (let w = 11; w >= 0; w--) { const a = addDays(ws0, -7 * w); labels.push(fmtD(a)); kms.push(Math.round(state.walks.filter(x => x.date >= a && x.date <= addDays(a, 6)).reduce((q, x) => q + x.km, 0) * 10) / 10); }
-    drawChart('chw', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+    drawChart('chw', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
     return;
   }
   if (ui.runTab === 'futbol') {
     const ms = state.matches.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-15); if (!ms.length) return;
-    drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [{ data: ms.map(m => m.goals), backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true, ticks: { precision: 0 } } } }) });
+    drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [{ data: ms.map(m => m.goals), backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } }) });
     return;
   }
   const runs = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)); if (!runs.length) return;
   const ws = weekStart(today()), labels = [], kms = [];
   for (let w = 11; w >= 0; w--) { const s = addDays(ws, -7 * w); labels.push(fmtD(s)); kms.push(Math.round(state.runs.filter(r => r.date >= s && r.date <= addDays(s, 6)).reduce((a, r) => a + r.km, 0) * 10) / 10); }
-  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
   const last = runs.filter(r => runPace(r) > 0).slice(-15);
-  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), LGRAY)] }, options: chartBase({ scales: { x: { grid: { color: '#2e2e2e' } }, y: { reverse: true, grid: { color: '#2e2e2e' } } } }) });
+  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [{ ...lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), LGRAY), tooltip: { callbacks: { label: c => ' ' + fmtTime(c.parsed.y) + ' min/km' } } }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { reverse: true, grid: { color: GRID }, ticks: { callback: v => fmtTime(v) } } } }) });
 }
 
 /* --- Ajustes --- */
@@ -786,7 +786,7 @@ V.ajustes = () => `
     ${sb ? (user ? `<p class="muted small">Sesión: ${esc(user.email)}</p><p class="small" id="syncBadge">${syncText()}</p>
       <div class="row wrap"><button data-act="sync-now">Sincronizar ahora</button><button class="btn-danger" data-act="logout">Cerrar sesión</button></div>`
       : `<p class="muted small">Estás usando la app sin cuenta: tus datos viven solo en este dispositivo.</p><button class="btn-primary" data-act="goto-auth">Iniciar sesión / crear cuenta</button>`)
-      : `<p class="muted small" id="syncBadge">${syncText()}. Configurá Supabase en <code>config.js</code> para activar cuentas y sincronización (ver README).</p>`}
+      : `<p class="muted small" id="syncBadge">${syncText()}. Tus datos se guardan solo en este dispositivo. Descargá un respaldo de vez en cuando para no perderlos.</p>`}
   </div>
   ${sb && user ? `<div class="card"><h3>Arena</h3><p class="muted small">Tu nombre y un resumen (gloria, sesiones, km, récords, cargas máximas y tus últimas carreras con kilómetros, duración y ritmo) quedan visibles para otros gladiadores. Tu peso corporal, medidas, rutina y notas nunca se comparten.</p>
     <label>Nombre de gladiador</label><input data-in="pname" maxlength="24" value="${esc(profileName())}">
@@ -855,13 +855,13 @@ async function pushProfile() {
   } catch (e) { dbg('profile', e); }
 }
 V.arena = () => `<h1>Arena</h1><p class="sub">Medite tu fuerza contra la de otro gladiador. Cada uno tiene su cuenta y sus datos privados; solo se comparte un resumen.</p>
-  <div id="arena"><div class="card empty"><span class="big">···</span>Cargando la arena…</div></div>`;
-const arenaMsg = (t, btn = '') => `<div class="card empty"><span class="big">···</span>${t}${btn}</div>`;
+  <div id="arena"><div class="card empty">Cargando la arena…</div></div>`;
+const arenaMsg = (t, btn = '') => `<div class="card empty">${t}${btn}</div>`;
 async function afterArena() {
   const box = $('#arena'); if (!box) return;
-  if (!sb) { box.innerHTML = arenaMsg('Para competir hace falta activar las cuentas (ver README).'); return; }
-  if (!user) { box.innerHTML = arenaMsg('Iniciá sesión para entrar a la arena.', '<br><br><button class="btn-primary" data-act="goto-auth">Entrar</button>'); return; }
-  if (state.profile?.share === false) { box.innerHTML = arenaMsg('Para ver a otros gladiadores tenés que compartir tu progreso.', '<br><br><button data-act="goto-settings">Ir a Ajustes</button>'); return; }
+  if (!sb) { box.innerHTML = arenaMsg('<b>La Arena necesita una cuenta</b>Esta instalación funciona sin conexión: tus datos quedan solo en este dispositivo y no hay rivales con quienes compararte.'); return; }
+  if (!user) { box.innerHTML = arenaMsg('<b>Entrá con tu cuenta</b>Iniciá sesión para medirte con otros gladiadores.', '<br><button class="btn-primary" data-act="goto-auth">Iniciar sesión</button>'); return; }
+  if (state.profile?.share === false) { box.innerHTML = arenaMsg('<b>Tu progreso no se comparte</b>Para ver a otros gladiadores, activá “Compartir mi progreso” en Ajustes.', '<br><button data-act="goto-settings">Ir a Ajustes</button>'); return; }
   try {
     await pushProfile();
     const { data, error } = await sb.from('profiles').select('user_id,name,stats,updated_at').neq('user_id', user.id).eq('share', true);
@@ -870,21 +870,21 @@ async function afterArena() {
       updated_at: typeof r?.updated_at === 'string' ? r.updated_at.slice(0, 40) : '', stats: cleanStats(r?.stats) })).filter(r => r.user_id);
     if (!ui.rivals.some(r => r.user_id === ui.rivalId)) ui.rivalId = ui.rivals[0]?.user_id || null;
     renderArena();
-  } catch (e) { dbg(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('No se pudo cargar la arena. Revisá tu conexión.', '<br><br><button data-act="arena-refresh">Reintentar</button>'); }
+  } catch (e) { dbg(e); const b = $('#arena'); if (b) b.innerHTML = arenaMsg('<b>No se pudo cargar la Arena</b>Revisá tu conexión y volvé a intentar.', '<br><button data-act="arena-refresh">Reintentar</button>'); }
 }
 function rrunsHtml(rv) {
   const runs = (Array.isArray(rv.stats?.runs) ? rv.stats.runs : []).map(cleanRun).filter(Boolean);
-  if (!runs.length) return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró carreras.</div>`;
+  if (!runs.length) return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px">${esc(rv.name)} todavía no registró carreras.</div>`;
   return `<h2>Carreras de ${esc(rv.name)}</h2><div class="card">${runs.map(r => `<div class="list-item" style="display:block"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>`).join('')}</div>`;
 }
 function rwalksHtml(rv) {
   const ws = (Array.isArray(rv.stats?.walks) ? rv.stats.walks : []).map(cleanWalk).filter(Boolean);
-  if (!ws.length) return `<h2>Caminatas de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró caminatas.</div>`;
+  if (!ws.length) return `<h2>Caminatas de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px">${esc(rv.name)} todavía no registró caminatas.</div>`;
   return `<h2>Caminatas de ${esc(rv.name)}</h2><div class="card">${ws.map(w => `<div class="list-item" style="display:block"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>`).join('')}</div>`;
 }
 function rmatchesHtml(rv) {
   const ms = (Array.isArray(rv.stats?.matches) ? rv.stats.matches : []).map(cleanMatch).filter(Boolean);
-  if (!ms.length) return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px"><span class="big">···</span>${esc(rv.name)} todavía no registró partidos.</div>`;
+  if (!ms.length) return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card empty" style="padding:18px">${esc(rv.name)} todavía no registró partidos.</div>`;
   return `<h2>Partidos de ${esc(rv.name)}</h2><div class="card">${ms.map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div></div>`).join('')}</div>`;
 }
 function duelRow(label, a, b, fmt = v => fmtN(v, 0)) {
@@ -901,7 +901,7 @@ function renderArena() {
     .concat([{ name: 'Tú', xp: me.xp, tier: me.rank, me: true }]).sort((a, b) => b.xp - a.xp);
   const rankCard = `<h2>Clasificación</h2><div class="card">${ranking.map((r, i) => `<div class="list-item rank-row"><span class="pos">${i + 1}</span>
     <div class="grow"><b class="${r.me ? 'gold-t' : ''}">${esc(r.name)}</b><div class="muted small">${esc(r.tier)}</div></div><span class="tag ${r.me ? 'gold' : ''}">${r.xp} xp</span></div>`).join('')}</div>`;
-  if (!rivals.length) { box.innerHTML = arenaMsg('Todavía no hay otros gladiadores.<br>Pedile a tu rival que cree su cuenta y active “Compartir mi progreso”.', '<br><br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
+  if (!rivals.length) { box.innerHTML = arenaMsg('<b>Todavía no hay rivales</b>Invitá a alguien a crear su cuenta y activar “Compartir mi progreso”. Va a aparecer acá.', '<br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
   const rv = rivals.find(r => r.user_id === ui.rivalId) || rivals[0], s = rv.stats || {};
   const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)], ['Caminata · km 30 días', me.walkKm30, N(s.walkKm30), v => fmtN(v)], ['Partidos · 30 días', me.matches30, N(s.matches30)], ['Goles · 30 días', me.goals30, N(s.goals30)],
     ['Récords', me.prs, N(s.prs)], ['Semanas seguidas', me.streak, N(s.streak)], ['Campañas cumplidas', me.goalsDone, N(s.goalsDone)]];
@@ -924,10 +924,10 @@ function renderArena() {
   ${rankCard}
   <p class="muted small center">Actualizado ${rv.updated_at ? new Date(rv.updated_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '–'} · <a href="#" class="gold-t" data-act="arena-refresh">Actualizar</a></p>`;
   const labels = Array.from({ length: 8 }, (_, i) => fmtD(addDays(weekStart(today()), -7 * (7 - i))));
-  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true, ticks: { precision: 0 } } } });
+  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } });
   const ds = (a, b) => [{ label: 'Tú', data: a, backgroundColor: ORANGE, borderRadius: 3 }, { label: rv.name, data: Array.isArray(b) ? b : [], backgroundColor: LGRAY, borderRadius: 3 }];
   drawChart('ch1', { type: 'bar', data: { labels, datasets: ds(me.weeks, s.weeks) }, options: opt });
-  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: '#2e2e2e' }, beginAtZero: true } } }) });
+  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
 }
 
 /* ---------- Render / ruteo ---------- */
@@ -1070,7 +1070,7 @@ const ACTIONS = {
   'live-addex': () => pickExercise(id => { const l = lastSets(id); state.active.entries.push({ exId: id, sets: Array.from({ length: 3 }, (_, i) => ({ w: l?.[i]?.w ?? l?.[0]?.w ?? null, r: l?.[i]?.r ?? null, done: false })) }); ui.min && (ui.min[state.active.entries.length - 1] = false); save(); render(true); }),
   'live-finish': finishSession,
   'live-cancel': () => { if (confirm(state.active?.edit ? '¿Cancelar la edición? Se conserva el entrenamiento como estaba.' : '¿Descartar el entrenamiento en curso?')) { state.active = null; stopRest(); save(); render(); } },
-  'sess-del': el => { if (confirm('¿Eliminar esta sesión del historial?')) { state.sessions = state.sessions.filter(s => s.id !== el.dataset.id); save(); render(true); } },
+  'sess-del': el => { if (confirm('¿Eliminar este entrenamiento del historial? No se puede deshacer.')) { state.sessions = state.sessions.filter(s => s.id !== el.dataset.id); save(); closeModal(); render(true); } },
   'sess-reopen': el => {
     const x = state.sessions.find(q => q.id === el.dataset.id); if (!x) return;
     if (state.active && !confirm('Ya tenés un entrenamiento en curso. ¿Reemplazarlo?')) return;
@@ -1084,8 +1084,9 @@ const ACTIONS = {
     openModal(`<h2 style="margin-top:0">${esc(s.name)}</h2><p class="sub">${fmtD(s.date)}${s.dur ? ' · ' + s.dur + ' min' : ''}</p>
       ${s.entries.map(e => `<div class="list-item"><div class="grow"><b>${esc(exName(e.exId))}</b>${s.prs?.includes(e.exId) ? '<span class="pr">PR</span>' : ''}<div class="muted small">${e.sets.map(x => `${fmtN(x.w)}kg×${x.r}`).join(' · ')}</div></div></div>`).join('')}
       <button class="btn-primary btn-block" style="margin-top:12px" data-act="sess-reopen" data-id="${s.id}">Reabrir y editar</button>
-      <button class="btn-ghost btn-block" style="margin-top:8px" data-act="modal-close">Cerrar</button>`);
+      <div class="row" style="margin-top:8px"><button class="btn-ghost grow" data-act="modal-close">Cerrar</button><button class="btn-danger grow" data-act="sess-del" data-id="${s.id}">Eliminar</button></div>`);
   },
+  'hist-more': () => { ui.histN = (ui.histN || 6) + 20; render(true); },
 
   // selector ejercicios
   pickg: el => { ui.pick.g = el.dataset.g; document.querySelectorAll('#modal [data-act=pickg]').forEach(b => b.classList.toggle('on', b === el)); renderPickList(); },
@@ -1284,7 +1285,7 @@ async function boot() {
   }
   loadState();
   Motion.buildNav(TABS);
-  if (window.Chart) { Chart.defaults.color = '#A1A1A1'; Chart.defaults.font.family = 'system-ui, sans-serif'; }
+  if (window.Chart) { Chart.defaults.color = '#8C8C8C'; Chart.defaults.font.family = 'Archivo, system-ui, sans-serif'; Chart.defaults.font.size = 12; Chart.defaults.borderColor = GRID; Chart.defaults.scale.border = { display: false }; Chart.defaults.plugins.legend.labels.usePointStyle = true; Chart.defaults.plugins.legend.labels.pointStyleWidth = 10; Chart.defaults.plugins.tooltip.backgroundColor = '#202020'; Chart.defaults.plugins.tooltip.borderColor = '#2a2a2a'; Chart.defaults.plugins.tooltip.borderWidth = 1; Chart.defaults.plugins.tooltip.padding = 10; Chart.defaults.plugins.tooltip.cornerRadius = 8; Chart.defaults.elements.point.radius = 2.5; }
   if (CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase) {
     sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
     try { const { data } = await sb.auth.getSession(); user = data.session?.user || null; } catch { user = null; }
