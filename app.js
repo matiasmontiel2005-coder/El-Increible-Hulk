@@ -338,17 +338,29 @@ function drawChart(id, cfg) {
   charts.push(new Chart(el, cfg));
 }
 function chartBase(extra = {}) {
-  return Object.assign({
-    responsive: true, maintainAspectRatio: false,
-    plugins: { legend: { display: false } },
-    scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: GRID }, beginAtZero: false } }
-  }, extra);
+  const o = {
+    responsive: true, maintainAspectRatio: false, animation: { duration: 500 },
+    interaction: { mode: 'index', intersect: false },
+    plugins: { legend: { display: false, align: 'start', labels: { boxWidth: 10, boxHeight: 10, padding: 14 } }, tooltip: { displayColors: false, titleFont: { weight: '600' } } },
+    scales: {
+      x: { grid: { display: false }, ticks: { maxRotation: 0, autoSkip: true, maxTicksLimit: 6 } },
+      y: { grid: { color: GRID }, beginAtZero: true, ticks: { maxTicksLimit: 5 } }
+    }
+  };
+  // mezcla profunda simple de lo que pide cada gráfico
+  const merge = (a, b) => { for (const k in b) { if (b[k] && typeof b[k] === 'object' && !Array.isArray(b[k]) && typeof b[k] !== 'function') { a[k] = merge(a[k] && typeof a[k] === 'object' ? a[k] : {}, b[k]); } else a[k] = b[k]; } return a; };
+  return merge(o, extra);
 }
-// Paleta de los gráficos (la misma de la interfaz)
-const ORANGE = '#FF5C22', RUST = '#A74B2E', LGRAY = '#D3D3D3', GRID = '#232323';
-function lineDs(label, data, color = ORANGE, fill = true) {
-  return { label, data, borderColor: color, backgroundColor: color + '33', pointBackgroundColor: color, tension: .25, fill, pointRadius: 3, borderWidth: 2 };
+// Colores por actividad (validados para daltonismo sobre el fondo oscuro). Cada actividad conserva su color en toda la app.
+const ORANGE = '#FF5C22', GRID = '#262626';
+const C = { gym: '#FF5C22', run: '#3FA0D4', walk: '#BE8F2A', foot: '#9A86E6', rival: '#3FA0D4' };
+function lineDs(label, data, color = ORANGE) {
+  return { label, data, borderColor: color, backgroundColor: color, pointBackgroundColor: color, pointBorderColor: '#181818', pointBorderWidth: 2, pointRadius: data.length > 10 ? 0 : 4, pointHoverRadius: 6, pointHitRadius: 12, tension: .3, fill: false, borderWidth: 2 };
 }
+const barDs = (label, data, color = ORANGE, stack) => ({ label, data, backgroundColor: color, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 26, ...(stack ? { stack, borderColor: '#181818', borderWidth: { top: 2 } } : {}) });
+// Semanas: etiqueta corta en el eje y "Semana del …" en el detalle
+const weekTitle = items => 'Semana del ' + items[0].label;
+function weeksBack(n) { const ws = weekStart(today()); return Array.from({ length: n }, (_, i) => { const a = addDays(ws, -7 * (n - 1 - i)); return { a, b: addDays(a, 6), label: fmtD(a) }; }); }
 
 /* ---------- Supabase / sincronización ---------- */
 let sb = null, user = null, syncing = false;
@@ -633,8 +645,8 @@ V.prog_fuerza = () => {
     <div class="card stat"><b>${h.length}</b><span>Sesiones</span></div>
     <div class="card stat"><b class="${best >= first ? 'ok-t' : ''}">${best - first >= 0 ? '+' : ''}${fmtN(best - first)}</b><span>Desde el inicio</span></div>
   </div>
-  <div class="card"><h3>Peso máximo, repeticiones con ese peso y 1RM estimado</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
-  <div class="card"><h3>Volumen por sesión (kg × reps)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>
+  <div class="card"><h3>Peso máximo por sesión</h3><p class="chart-note">En kilos. Tocá el gráfico para ver con cuántas repeticiones lo hiciste.</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><h3>Repeticiones con ese peso</h3><p class="chart-note">Cuántas repeticiones hiciste con el peso máximo de cada sesión.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>
   <div class="card"><h3>Registro</h3>${h.slice().reverse().slice(0, 10).map(x => `<div class="list-item"><div class="grow"><b>${fmtD(x.date)}</b>
     <div class="muted small">${x.sets.map(s => `${s.r} × ${fmtN(s.w)} kg`).join(' · ')}</div></div><span class="tag gold">${x.bestReps} × ${fmtN(x.best)} kg</span></div>`).join('')}</div>`;
 };
@@ -649,7 +661,7 @@ V.prog_cuerpo = () => {
     <div><label style="margin-top:0">${m.name} (${m.unit})</label><input type="text" inputmode="decimal" autocomplete="off" id="bv" placeholder="${list.length ? fmtN(list[list.length - 1].value) : ''}"></div></div>
     <button class="btn-primary btn-block" style="margin-top:12px" data-act="body-add">Registrar medida</button>
   </div>
-  ${list.length ? `<div class="card"><h3>${m.name}</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
+  ${list.length ? `<div class="card"><h3>${m.name} (${m.unit})</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
   <div class="card">${list.slice().reverse().slice(0, 12).map(b => `<div class="list-item"><div class="grow"><b>${fmtN(b.value)} ${m.unit}</b><div class="muted small">${fmtD(b.date)}</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="body-del" data-id="${b.id}">✕</button></div>`).join('')}</div>`
     : `<div class="card empty"><b>Sin registros de ${m.name.toLowerCase()}</b>Cargá la primera medida arriba para empezar el gráfico.</div>`}`;
@@ -662,29 +674,32 @@ V.prog_constancia = () => {
   return `<div class="grid3"><div class="card stat"><b>${total}</b><span>Sesiones</span></div>
   <div class="card stat"><b>${streak}</b><span>Semanas seguidas</span></div>
   <div class="card stat"><b>${vol >= 1000 ? fmtN(vol / 1000) + 't' : Math.round(vol)}</b><span>Volumen total${vol >= 1000 ? '' : ' kg'}</span></div></div>
-  <div class="card"><h3>Entrenos por semana (12 semanas)</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
-  <div class="card"><h3>Volumen semanal (kg)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>`;
+  <div class="card"><h3>Actividades por semana</h3><p class="chart-note">Últimas 12 semanas, por tipo de actividad.</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><h3>Kilos levantados por semana</h3><p class="chart-note">Suma de peso × repeticiones de todas tus series.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>`;
 };
 function afterProgreso() {
   if (ui.progTab === 'fuerza' && ui.exId) {
-    const h = exHistory(ui.exId); if (!h.length) return;
+    const h = exHistory(ui.exId).slice(-20); if (!h.length) return;
     const labels = h.map(x => fmtD(x.date));
-    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máx (kg)', h.map(x => x.best), ORANGE), { ...lineDs('Reps con ese peso', h.map(x => x.bestReps), '#FFFFFF', false), yAxisID: 'y2', borderDash: [5, 4] }, lineDs('1RM estimado', h.map(x => Math.round(x.e1rm * 10) / 10), LGRAY, false)] }, options: chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { grid: { color: GRID }, ticks: { maxRotation: 0, autoSkip: true } }, y: { grid: { color: GRID }, beginAtZero: false }, y2: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false }, ticks: { precision: 0 } } } }) });
-    drawChart('ch2', { type: 'bar', data: { labels, datasets: [{ data: h.map(x => Math.round(x.vol)), backgroundColor: RUST, borderColor: ORANGE, borderWidth: 1, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
+    drawChart('ch1', { type: 'line', data: { labels, datasets: [lineDs('Peso máximo', h.map(x => x.best))] },
+      options: chartBase({ scales: { y: { beginAtZero: false, grace: '10%', ticks: { callback: v => fmtN(v) + ' kg' } } },
+        plugins: { tooltip: { callbacks: { label: c => `${fmtN(h[c.dataIndex].best)} kg × ${h[c.dataIndex].bestReps} reps` } } } }) });
+    drawChart('ch2', { type: 'bar', data: { labels, datasets: [barDs('Repeticiones', h.map(x => x.bestReps))] },
+      options: chartBase({ scales: { y: { ticks: { precision: 0 } } },
+        plugins: { tooltip: { callbacks: { label: c => `${c.parsed.y} reps con ${fmtN(h[c.dataIndex].best)} kg` } } } }) });
   } else if (ui.progTab === 'cuerpo') {
-    const list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date));
-    if (list.length) drawChart('ch1', { type: 'line', data: { labels: list.map(b => fmtD(b.date)), datasets: [lineDs(MEASURES[ui.bodyType].name, list.map(b => b.value))] }, options: chartBase() });
+    const m = MEASURES[ui.bodyType], list = state.body.filter(b => b.type === ui.bodyType).sort((a, b) => a.date.localeCompare(b.date)).slice(-30);
+    if (list.length) drawChart('ch1', { type: 'line', data: { labels: list.map(b => fmtD(b.date)), datasets: [lineDs(m.name, list.map(b => b.value))] },
+      options: chartBase({ scales: { y: { beginAtZero: false, grace: '10%' } }, plugins: { tooltip: { callbacks: { label: c => `${fmtN(c.parsed.y)} ${m.unit}` } } } }) });
   } else if (ui.progTab === 'constancia') {
-    const ws = weekStart(today()), labels = [], gym = [], run = [], vol = [];
-    for (let w = 11; w >= 0; w--) {
-      const s = addDays(ws, -7 * w), e = addDays(s, 6); labels.push(fmtD(s));
-      const ss = state.sessions.filter(x => x.date >= s && x.date <= e);
-      gym.push(ss.length); run.push(state.runs.filter(x => x.date >= s && x.date <= e).length);
-      vol.push(Math.round(ss.reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((c, y) => c + (y.w || 0) * (y.r || 0), 0), 0), 0)));
-    }
-    const opt = chartBase({ plugins: { legend: { display: true, labels: { boxWidth: 12 } } }, scales: { x: { stacked: true, grid: { color: GRID } }, y: { stacked: true, grid: { color: GRID }, ticks: { precision: 0 }, beginAtZero: true } } });
-    drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ label: 'Gimnasio', data: gym, backgroundColor: RUST, borderRadius: 4 }, { label: 'Running', data: run, backgroundColor: ORANGE, borderRadius: 4 }] }, options: opt });
-    drawChart('ch2', { type: 'line', data: { labels, datasets: [lineDs('Volumen', vol)] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
+    const W = weeksBack(12), labels = W.map(w => w.label), inW = (arr, w) => arr.filter(x => x.date >= w.a && x.date <= w.b);
+    const kinds = [['Gimnasio', state.sessions, C.gym], ['Correr', state.runs, C.run], ['Caminata', state.walks, C.walk], ['Fútbol', state.matches, C.foot]].filter(k => k[1].length);
+    const opt = chartBase({ plugins: { legend: { display: kinds.length > 1 }, tooltip: { displayColors: true, filter: i => i.parsed.y > 0, callbacks: { title: weekTitle } } },
+      scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } } });
+    drawChart('ch1', { type: 'bar', data: { labels, datasets: kinds.map(([n, arr, c]) => barDs(n, W.map(w => inW(arr, w).length), c, 'a')) }, options: opt });
+    const vol = W.map(w => Math.round(inW(state.sessions, w).reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((q, y) => q + (y.w || 0) * (y.r || 0), 0), 0), 0)));
+    drawChart('ch2', { type: 'bar', data: { labels, datasets: [barDs('Kilos', vol)] },
+      options: chartBase({ scales: { y: { ticks: { callback: v => v >= 1000 ? fmtN(v / 1000) + ' t' : v } } }, plugins: { tooltip: { callbacks: { title: weekTitle, label: c => fmtN(c.parsed.y) + ' kg' } } } }) });
   }
 }
 
@@ -732,7 +747,7 @@ function walkView() {
   return `<p class="sub">Registrá cada caminata con la distancia y el ritmo promedio por kilómetro. Suma gloria y tu rival la ve en la Arena.</p>
   <button class="btn-primary btn-block" data-act="walk-new" style="margin-bottom:12px">+ Registrar caminata</button>
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Caminatas</span></div><div class="card stat"><b>${pace ? fmtTime(pace) : '–'}</b><span>Ritmo medio</span></div></div>
-  ${ws.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="chw"></canvas></div></div>
+  ${ws.length ? `<div class="card"><h3>Kilómetros caminados por semana</h3><p class="chart-note">Últimas 12 semanas.</p><div class="chart-box sm"><canvas id="chw"></canvas></div></div>
   <div class="card">${ws.slice(0, 50).map(w => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(w.date)}</div>${walk2(w)}</div>
     <button class="btn-sm icon-btn btn-danger" data-act="walk-del" data-id="${w.id}" aria-label="Eliminar caminata">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin caminatas registradas</b>Tocá “Registrar caminata” para cargar la primera.</div>`}`;
 }
@@ -742,7 +757,7 @@ function futbolView() {
   return `<p class="sub">Cargá cada partido: los goles que hiciste y los minutos que jugaste. Suman gloria y tu rival los ve en la Arena.</p>
   <button class="btn-primary btn-block" data-act="match-new" style="margin-bottom:12px">+ Registrar partido</button>
   <div class="grid3"><div class="card stat"><b>${ms.length}</b><span>Partidos</span></div><div class="card stat"><b>${goals}</b><span>Goles</span></div><div class="card stat"><b>${mins}</b><span>Minutos</span></div></div>
-  ${ms.length ? `<div class="card"><h3>Goles por partido</h3><div class="chart-box"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
+  ${ms.length ? `<div class="card"><h3>Goles por partido</h3><p class="chart-note">Tus últimos 15 partidos.</p><div class="chart-box sm"><canvas id="chf"></canvas></div><p class="hint" style="margin-bottom:0">Promedio: ${fmtN(goals / ms.length)} por partido · ${fmtN(goals / mins * 90)} cada 90 min</p></div>
   <div class="card">${ms.slice(0, 50).map(m => `<div class="list-item"><div class="grow"><b>${m.goals} ${m.goals === 1 ? 'gol' : 'goles'}</b><div class="muted small">${fmtD(m.date)} · ${fmtMin(m.min)} jugados</div></div>
     <button class="btn-sm icon-btn btn-danger" data-act="match-del" data-id="${m.id}" aria-label="Eliminar partido">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin partidos registrados</b>Tocá “Registrar partido” para cargar el primero.</div>`}`;
 }
@@ -753,30 +768,28 @@ function runView() {
   return `<p class="sub">Registrá cada carrera con tres datos: kilómetros, duración y ritmo promedio por kilómetro. Tu rival puede verlos en la Arena.</p>
   <button class="btn-primary btn-block" data-act="run-new" style="margin-bottom:12px">+ Registrar carrera</button>
   <div class="grid3"><div class="card stat"><b>${fmtN(km)}</b><span>Km (30 días)</span></div><div class="card stat"><b>${m.length}</b><span>Salidas</span></div><div class="card stat"><b>${paceW ? fmtTime(paceW) : '–'}</b><span>Ritmo medio</span></div></div>
-  ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><div class="chart-box"><canvas id="ch1"></canvas></div></div>
-  <div class="card"><h3>Ritmo por salida (min/km)</h3><div class="chart-box"><canvas id="ch2"></canvas></div></div>` : ''}
+  ${runs.length ? `<div class="card"><h3>Kilómetros por semana</h3><p class="chart-note">Últimas 12 semanas.</p><div class="chart-box sm"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><h3>Ritmo por salida</h3><p class="chart-note">Minutos por kilómetro. Más arriba es más rápido.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>` : ''}
   ${runs.length ? `<div class="card">${runs.slice(0, 30).map(r => `<div class="list-item" style="align-items:flex-start"><div class="grow"><div class="muted small" style="margin-bottom:6px">${fmtD(r.date)}</div>${run3(r)}</div>
     <button class="btn-sm icon-btn btn-danger" data-act="run-del" data-id="${r.id}">✕</button></div>`).join('')}</div>` : `<div class="card empty"><b>Sin carreras registradas</b>Tocá “Registrar carrera” para cargar la primera.</div>`}`;
 }
 function afterCorrer() {
-  if (ui.runTab === 'caminata') {
-    if (!state.walks.length) return;
-    const ws0 = weekStart(today()), labels = [], kms = [];
-    for (let w = 11; w >= 0; w--) { const a = addDays(ws0, -7 * w); labels.push(fmtD(a)); kms.push(Math.round(state.walks.filter(x => x.date >= a && x.date <= addDays(a, 6)).reduce((q, x) => q + x.km, 0) * 10) / 10); }
-    drawChart('chw', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
-    return;
-  }
+  const W = weeksBack(12), labels = W.map(w => w.label);
+  const kmWeek = (arr, color, id, what) => drawChart(id, { type: 'bar', data: { labels, datasets: [barDs('Km', W.map(w => Math.round(arr.filter(x => x.date >= w.a && x.date <= w.b).reduce((q, x) => q + x.km, 0) * 10) / 10), color)] },
+    options: chartBase({ plugins: { tooltip: { callbacks: { title: weekTitle, label: c => c.parsed.y ? `${fmtN(c.parsed.y)} km ${what}` : `Sin ${what === 'caminados' ? 'caminatas' : 'salidas'}` } } } }) });
+  if (ui.runTab === 'caminata') { if (state.walks.length) kmWeek(state.walks, C.walk, 'chw', 'caminados'); return; }
   if (ui.runTab === 'futbol') {
     const ms = state.matches.slice().sort((a, b) => a.date.localeCompare(b.date)).slice(-15); if (!ms.length) return;
-    drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [{ data: ms.map(m => m.goals), backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } }) });
+    drawChart('chf', { type: 'bar', data: { labels: ms.map(m => fmtD(m.date)), datasets: [barDs('Goles', ms.map(m => m.goals), C.foot)] },
+      options: chartBase({ scales: { y: { ticks: { precision: 0 } } }, plugins: { tooltip: { callbacks: { label: c => `${c.parsed.y} ${c.parsed.y === 1 ? 'gol' : 'goles'} en ${fmtMin(ms[c.dataIndex].min)}` } } } }) });
     return;
   }
-  const runs = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)); if (!runs.length) return;
-  const ws = weekStart(today()), labels = [], kms = [];
-  for (let w = 11; w >= 0; w--) { const s = addDays(ws, -7 * w); labels.push(fmtD(s)); kms.push(Math.round(state.runs.filter(r => r.date >= s && r.date <= addDays(s, 6)).reduce((a, r) => a + r.km, 0) * 10) / 10); }
-  drawChart('ch1', { type: 'bar', data: { labels, datasets: [{ data: kms, backgroundColor: ORANGE, borderRadius: 4 }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
-  const last = runs.filter(r => runPace(r) > 0).slice(-15);
-  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [{ ...lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), LGRAY), tooltip: { callbacks: { label: c => ' ' + fmtTime(c.parsed.y) + ' min/km' } } }] }, options: chartBase({ scales: { x: { grid: { color: GRID } }, y: { reverse: true, grid: { color: GRID }, ticks: { callback: v => fmtTime(v) } } } }) });
+  if (!state.runs.length) return;
+  kmWeek(state.runs, C.run, 'ch1', 'corridos');
+  const last = state.runs.slice().sort((a, b) => a.date.localeCompare(b.date)).filter(r => runPace(r) > 0).slice(-15);
+  drawChart('ch2', { type: 'line', data: { labels: last.map(r => fmtD(r.date)), datasets: [lineDs('Ritmo', last.map(r => Math.round(runPace(r) * 100) / 100), C.run)] },
+    options: chartBase({ scales: { y: { reverse: true, beginAtZero: false, grace: '8%', ticks: { callback: v => fmtTime(v) } } },
+      plugins: { tooltip: { callbacks: { label: c => `${fmtTime(c.parsed.y)} min/km · ${fmtN(last[c.dataIndex].km, 2)} km` } } } }) });
 }
 
 /* --- Ajustes --- */
@@ -917,8 +930,8 @@ function renderArena() {
   <div class="card gold"><div class="vs"><b class="gold-t">Tú</b><span class="x">VS</span><b class="rival-t">${esc(rv.name)}</b></div>
     <div class="score" style="margin-top:14px">${wa} — ${wb}<small>Marcador del duelo</small></div></div>
   <div class="card">${rows.map(r => duelRow(...r)).join('')}</div>
-  <div class="card"><h3><span class="me-dot"></span>Tú <span class="ri-dot" style="margin-left:14px"></span>${esc(rv.name)}</h3><p class="muted small" style="margin:6px 0 0">Entrenos por semana · últimas 8 semanas</p><div class="chart-box"><canvas id="ch1"></canvas></div></div>
-  <div class="card"><p class="muted small" style="margin:0">Kilómetros por semana</p><div class="chart-box"><canvas id="ch2"></canvas></div></div>
+  <div class="card"><h3>Días entrenados por semana</h3><p class="chart-note">Últimas 8 semanas, contando gimnasio, correr, caminata y fútbol.</p><div class="chart-box sm"><canvas id="ch1"></canvas></div></div>
+  <div class="card"><h3>Kilómetros corridos por semana</h3><p class="chart-note">Últimas 8 semanas.</p><div class="chart-box sm"><canvas id="ch2"></canvas></div></div>
   ${rrunsHtml(rv)}
   ${rwalksHtml(rv)}
   ${rmatchesHtml(rv)}
@@ -928,11 +941,11 @@ function renderArena() {
     : '<p class="muted small center" style="margin:0">Todavía no comparten ejercicios en común.</p>'}</div>
   ${rankCard}
   <p class="muted small center">Actualizado ${rv.updated_at ? new Date(rv.updated_at).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : '–'} · <a href="#" class="gold-t" data-act="arena-refresh">Actualizar</a></p>`;
-  const labels = Array.from({ length: 8 }, (_, i) => fmtD(addDays(weekStart(today()), -7 * (7 - i))));
-  const opt = chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: GRID }, beginAtZero: true, ticks: { precision: 0 } } } });
-  const ds = (a, b) => [{ label: 'Tú', data: a, backgroundColor: ORANGE, borderRadius: 3 }, { label: rv.name, data: Array.isArray(b) ? b : [], backgroundColor: LGRAY, borderRadius: 3 }];
-  drawChart('ch1', { type: 'bar', data: { labels, datasets: ds(me.weeks, s.weeks) }, options: opt });
-  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: chartBase({ scales: { x: { grid: { display: false } }, y: { grid: { color: GRID }, beginAtZero: true } } }) });
+  const labels = weeksBack(8).map(w => w.label), arr = v => Array.isArray(v) ? v.map(N) : [];
+  const ds = (a, b) => [barDs('Tú', a, C.gym), barDs(rv.name, arr(b), C.rival)];
+  const opt = (unit, prec) => chartBase({ plugins: { legend: { display: true }, tooltip: { displayColors: true, callbacks: { title: weekTitle, label: c => ` ${c.dataset.label}: ${fmtN(c.parsed.y)} ${unit === 'días' && c.parsed.y === 1 ? 'día' : unit}` } } }, scales: { y: { ticks: prec ? { precision: 0 } : {} } } });
+  drawChart('ch1', { type: 'bar', data: { labels, datasets: ds(me.weeks, s.weeks) }, options: opt('días', true) });
+  drawChart('ch2', { type: 'bar', data: { labels, datasets: ds(me.wkm, s.wkm) }, options: opt('km') });
 }
 
 /* ---------- Render / ruteo ---------- */

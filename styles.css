@@ -366,3 +366,9 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .duel-bar.z i { background: var(--line); }
 .rank-row .pos { font-family: var(--num); font-stretch: 85%; font-weight: 650; font-size: 17px; text-align: center; }
 @media (max-width: 380px) { .brand { letter-spacing: .22em; gap: 8px; } .rank-chip { padding: 6px 10px; } }
+
+/* Gráficos: título, nota breve con la unidad y altura según el contenido */
+.chart-note { margin: 4px 0 0; font-size: 13px; line-height: 1.45; color: var(--muted); }
+.chart-box { height: 210px; margin-top: 14px; }
+.chart-box.sm { height: 170px; }
+.duel-bar i.r, .ri-dot { background: #3FA0D4; }
