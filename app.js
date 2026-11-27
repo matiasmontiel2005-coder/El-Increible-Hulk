@@ -359,7 +359,7 @@ function lineDs(label, data, color = ORANGE) {
 }
 const barDs = (label, data, color = ORANGE, stack) => ({ label, data, backgroundColor: color, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 26, ...(stack ? { stack, borderColor: '#181818', borderWidth: { top: 2 } } : {}) });
 // Semanas: etiqueta corta en el eje y "Semana del …" en el detalle
-const weekTitle = items => 'Semana del ' + items[0].label;
+const weekTitle = items => items?.length ? 'Semana del ' + items[0].label : '';
 function weeksBack(n) { const ws = weekStart(today()); return Array.from({ length: n }, (_, i) => { const a = addDays(ws, -7 * (n - 1 - i)); return { a, b: addDays(a, 6), label: fmtD(a) }; }); }
 
 /* ---------- Supabase / sincronización ---------- */
@@ -694,7 +694,7 @@ function afterProgreso() {
   } else if (ui.progTab === 'constancia') {
     const W = weeksBack(12), labels = W.map(w => w.label), inW = (arr, w) => arr.filter(x => x.date >= w.a && x.date <= w.b);
     const kinds = [['Gimnasio', state.sessions, C.gym], ['Correr', state.runs, C.run], ['Caminata', state.walks, C.walk], ['Fútbol', state.matches, C.foot]].filter(k => k[1].length);
-    const opt = chartBase({ plugins: { legend: { display: kinds.length > 1 }, tooltip: { displayColors: true, filter: i => i.parsed.y > 0, callbacks: { title: weekTitle } } },
+    const opt = chartBase({ plugins: { legend: { display: kinds.length > 1 }, tooltip: { displayColors: true, filter: (i, _, all) => i.parsed.y > 0 || (all.every(x => !x.parsed.y) && i.datasetIndex === 0), callbacks: { title: weekTitle, label: c => c.parsed.y ? ` ${c.dataset.label}: ${c.parsed.y}` : 'Sin actividad' } } },
       scales: { x: { stacked: true }, y: { stacked: true, ticks: { precision: 0 } } } });
     drawChart('ch1', { type: 'bar', data: { labels, datasets: kinds.map(([n, arr, c]) => barDs(n, W.map(w => inW(arr, w).length), c, 'a')) }, options: opt });
     const vol = W.map(w => Math.round(inW(state.sessions, w).reduce((a, x) => a + x.entries.reduce((b, en) => b + en.sets.reduce((q, y) => q + (y.w || 0) * (y.r || 0), 0), 0), 0)));
