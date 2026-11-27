@@ -62,4 +62,20 @@ await expect('B NO puede secuestrar la fila de A con un upsert (user_data)', ()=
 await expect('B NO puede secuestrar el perfil de A con un upsert', ()=>db.query(`insert into public.profiles(user_id,name) values ('${A}','Hackeado') on conflict (user_id) do update set name=excluded.name`), true, 'row-level security');
 await as('authenticated', A);
 const fin = await db.query(`select data->>'hackeado' h, data->>'v' v from public.user_data where user_id='${A}'`); console.log((fin.rows[0].h===null&&fin.rows[0].v==='2'?'✔':'✘'),'los datos de A siguen intactos tras los ataques:',JSON.stringify(fin.rows[0])); fin.rows[0].h===null?ok++:fail++;
+// 6) grupos (ligas privadas)
+const C='cccccccc-cccc-cccc-cccc-cccccccccccc';
+await db.exec(`reset role; insert into auth.users values ('${C}') on conflict do nothing;
+ update public.profiles set share=true, grupo=null where user_id in ('${A}','${B}');
+ insert into public.profiles(user_id,name,share,grupo) values ('${C}','Crixus',true,'ABCD1234') on conflict (user_id) do update set grupo='ABCD1234', share=true;`);
+const ve = async (uid) => { await as('authenticated', uid); return (await db.query('select name from public.profiles order by name')).rows.map(r=>r.name).join(','); };
+const chk = (cond, name, x) => { console.log((cond?'✔':'✘'), name, x); cond?ok++:fail++; };
+let v = await ve(A); chk(v==='Maximus,Spartacus', 'sin grupo: A ve a B (también sin grupo) y no a C', v);
+v = await ve(C); chk(v==='Crixus', 'C (grupo ABCD1234) no ve a los que no están en su grupo', v);
+await as('authenticated', B); await expect('B se une al grupo con el código', ()=>db.query(`update public.profiles set grupo='ABCD1234' where user_id='${B}'`), false);
+v = await ve(B); chk(v==='Crixus,Spartacus', 'B ahora ve a C (mismo grupo)', v);
+v = await ve(A); chk(v==='Maximus', 'A ya no ve a B (B está en otro grupo)', v);
+await as('authenticated', A);
+await expect('código con formato inválido rechazado', ()=>db.query(`update public.profiles set grupo='abc' where user_id='${A}'`), true, 'profiles_grupo');
+const gB = await db.query(`update public.profiles set grupo=null where user_id='${B}'`); chk(gB.affectedRows===0, 'A NO puede sacar a B de su grupo', gB.affectedRows);
+await as('anon'); await expect('anon NO puede consultar el grupo', ()=>db.query('select public.mi_grupo()'), true, 'permission denied');
 console.log(`\n${ok} pruebas correctas, ${fail} con problemas`); process.exit(fail?1:0);

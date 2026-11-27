@@ -56,11 +56,28 @@ alter table public.profiles enable row level security;
 revoke all on public.profiles from anon;
 grant select, insert, update, delete on public.profiles to authenticated;
 
+-- Grupos (ligas privadas): quien comparte un código de 8 caracteres solo se ve con los de su grupo.
+-- Sin grupo, se ve con los demás que tampoco tienen grupo (la Arena abierta, como antes).
+alter table public.profiles add column if not exists grupo text;
+alter table public.profiles drop constraint if exists profiles_grupo_forma;
+alter table public.profiles add constraint profiles_grupo_forma
+  check (grupo is null or grupo ~ '^[A-Z0-9]{8}$') not valid;
+create index if not exists profiles_grupo_idx on public.profiles (grupo);
+-- Grupo de quien consulta. "security definer" para leerlo sin pasar por la misma política (evita recursión).
+create or replace function public.mi_grupo() returns text
+language sql stable security definer set search_path = '' as $$
+  select grupo from public.profiles where user_id = auth.uid()
+$$;
+revoke all on function public.mi_grupo() from public, anon;
+grant execute on function public.mi_grupo() to authenticated;
+
 drop policy if exists "profiles: ver compartidos o propio" on public.profiles;
+drop policy if exists "profiles: ver los de mi grupo o propio" on public.profiles;
 drop policy if exists "profiles: crear el propio" on public.profiles;
 drop policy if exists "profiles: editar el propio" on public.profiles;
 drop policy if exists "profiles: borrar el propio" on public.profiles;
-create policy "profiles: ver compartidos o propio" on public.profiles for select to authenticated using (share = true or auth.uid() = user_id);
+create policy "profiles: ver los de mi grupo o propio" on public.profiles for select to authenticated
+  using (auth.uid() = user_id or (share = true and grupo is not distinct from public.mi_grupo()));
 create policy "profiles: crear el propio" on public.profiles for insert to authenticated with check (auth.uid() = user_id);
 create policy "profiles: editar el propio" on public.profiles for update to authenticated using (auth.uid() = user_id) with check (auth.uid() = user_id);
 create policy "profiles: borrar el propio" on public.profiles for delete to authenticated using (auth.uid() = user_id);

@@ -33,6 +33,8 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 - Cada usuario crea **su propia cuenta** (email + contraseña) y tiene datos completamente separados (protegidos por Row Level Security).
 - Lo único compartido es un **resumen** que cada uno publica en la tabla `profiles`: nombre, rango, gloria, sesiones y km de 30 días, récords, constancia, campañas cumplidas, entrenos/km de las últimas 8 semanas, la carga máxima por ejercicio tus **últimas 10 carreras** (kilómetros, duración y ritmo) tus **últimas 10 caminatas** (distancia y ritmo) y tus **últimos 10 partidos** (goles y minutos). **Nunca** se comparte peso corporal, medidas, rutina ni notas.
 - Cada uno puede dejar de compartir desde **Ajustes → Arena** (y deja de ver a los demás).
+- **Grupos privados:** desde la Arena, alguien toca **Crear grupo** y comparte el código de 8 caracteres con **Invitar**. Quienes se unen con ese código solo se ven entre ellos (la base de datos lo hace cumplir con Row Level Security). Quien no está en un grupo se ve con los demás que tampoco están en uno (la "Arena abierta").
+- **Al actualizar desde una versión anterior, volvé a ejecutar `supabase/schema.sql`** para crear la columna de grupos. Mientras tanto la app sigue funcionando y en la Arena avisa que los grupos no están activos.
 - Si ya habías ejecutado una versión anterior del esquema, volvé a ejecutarlo: borra las tablas que ya no se usan. Para que solo entren ustedes dos: cuando ambos hayan creado su cuenta, en Supabase desactivá **Authentication → Sign In / Providers → "Allow new users to sign up"**. Así nadie más puede registrarse ni aparecer en la Arena.
 
 ## Seguridad

@@ -60,6 +60,8 @@ const TABS = [
 
 /* ---------- Rutinas listas para usar ---------- */
 // Cada día: [nombre, [[ejercicio, series, reps], ...]]. Los pesos quedan vacíos: se completan en el primer entrenamiento.
+const GRP_RE = /^[A-Z0-9]{8}$/, GRP_ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const newGroupCode = () => Array.from(crypto.getRandomValues(new Uint32Array(8)), n => GRP_ABC[n % GRP_ABC.length]).join('');
 const OBJ = { fuerza: 'Ganar fuerza', musculo: 'Ganar músculo', peso: 'Bajar de peso', activo: 'Mantenerme activo' };
 const TPL_DAYS = {
   fbA: ['Cuerpo completo A', [['Sentadilla', 3, 8], ['Press de banca', 3, 8], ['Remo con barra', 3, 8], ['Press militar', 3, 10], ['Plancha (seg)', 3, 30]]],
@@ -234,6 +236,7 @@ function sanitizeState(raw) {
   if (raw.settings?.onboarded === true) d.settings.onboarded = true;
   d.profile = { name: SAN.str(raw.profile?.name, 24), share: raw.profile?.share !== false };
   if (Object.hasOwn(OBJ, raw.profile?.goal)) d.profile.goal = raw.profile.goal;
+  if (GRP_RE.test(raw.profile?.grupo || '')) d.profile.grupo = raw.profile.grupo;
   return d;
 }
 // Datos públicos de otra persona (Arena): solo números acotados y textos cortos.
@@ -922,12 +925,24 @@ function buildStats() {
 async function pushProfile() {
   if (!sb || !user) return;
   try {
-    const { error } = await sb.from('profiles').upsert({ user_id: user.id, name: profileName(), share: state.profile?.share !== false, stats: buildStats(), updated_at: new Date().toISOString() });
+    const row = { user_id: user.id, name: profileName(), share: state.profile?.share !== false, stats: buildStats(), updated_at: new Date().toISOString() };
+    if (!ui.noGroups) row.grupo = state.profile?.grupo || null;
+    let { error } = await sb.from('profiles').upsert(row);
+    // Base de datos sin la columna "grupo" (falta volver a correr schema.sql): se publica igual, sin grupos.
+    if (error && /grupo/i.test(String(error?.message || error))) { ui.noGroups = true; delete row.grupo; ({ error } = await sb.from('profiles').upsert(row)); }
     if (error) throw error;
   } catch (e) { dbg('profile', e); }
 }
 V.arena = () => `<h1>Arena</h1><p class="sub">Medite tu fuerza contra la de otro gladiador. Cada uno tiene su cuenta y sus datos privados; solo se comparte un resumen.</p>
   <div id="arena"><div class="card empty">Cargando la arena…</div></div>`;
+function groupCard() {
+  const g = state.profile?.grupo;
+  if (ui.noGroups) return `<div class="card grp"><div class="grow"><h3>Grupos privados</h3><div class="muted small">Para usarlos, el administrador tiene que actualizar la base de datos (volver a correr <b>schema.sql</b>).</div></div></div>`;
+  return g ? `<div class="card grp"><div class="grow"><h3>Grupo privado</h3><div class="muted small">Solo ves a quienes entraron con tu código.</div><div class="grp-code" aria-label="Código del grupo">${g.slice(0, 4)} ${g.slice(4)}</div></div>
+      <div class="grp-acts"><button class="btn-sm btn-gold" data-act="grp-invite">Invitar</button><button class="btn-sm btn-ghost" data-act="grp-leave">Salir</button></div></div>`
+    : `<div class="card grp"><div class="grow"><h3>Arena abierta</h3><div class="muted small">Te medís con todos los que no están en un grupo. Armá uno privado para tus amigos o tu gimnasio.</div></div>
+      <div class="grp-acts"><button class="btn-sm btn-gold" data-act="grp-create">Crear grupo</button><button class="btn-sm" data-act="grp-join">Unirme</button></div></div>`;
+}
 const arenaMsg = (t, btn = '') => `<div class="card empty">${t}${btn}</div>`;
 async function afterArena() {
   const box = $('#arena'); if (!box) return;
@@ -973,14 +988,14 @@ function renderArena() {
     .concat([{ name: 'Tú', xp: me.xp, tier: me.rank, me: true }]).sort((a, b) => b.xp - a.xp);
   const rankCard = `<h2>Clasificación</h2><div class="card">${ranking.map((r, i) => `<div class="list-item rank-row"><span class="pos">${i + 1}</span>
     <div class="grow"><b class="${r.me ? 'gold-t' : ''}">${esc(r.name)}</b><div class="muted small">${esc(r.tier)}</div></div><span class="tag ${r.me ? 'gold' : ''}">${r.xp} xp</span></div>`).join('')}</div>`;
-  if (!rivals.length) { box.innerHTML = arenaMsg('<b>Todavía no hay rivales</b>Invitá a alguien a crear su cuenta y activar “Compartir mi progreso”. Va a aparecer acá.', '<br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
+  if (!rivals.length) { box.innerHTML = groupCard() + arenaMsg(state.profile?.grupo ? '<b>Tu grupo todavía está vacío</b>Tocá “Invitar” y mandale el código a quien quieras sumar.' : '<b>Todavía no hay rivales</b>Invitá a alguien a crear su cuenta y activar “Compartir mi progreso”. Va a aparecer acá.', '<br><button data-act="arena-refresh">Actualizar</button>') + rankCard; return; }
   const rv = rivals.find(r => r.user_id === ui.rivalId) || rivals[0], s = rv.stats || {};
   const rows = [['Gloria', me.xp, N(s.xp)], ['Sesiones · 30 días', me.sessions30, N(s.sessions30)], ['Km · 30 días', me.km30, N(s.km30), v => fmtN(v)], ['Caminata · km 30 días', me.walkKm30, N(s.walkKm30), v => fmtN(v)], ['Partidos · 30 días', me.matches30, N(s.matches30)], ['Goles · 30 días', me.goals30, N(s.goals30)],
     ['Récords', me.prs, N(s.prs)], ['Semanas seguidas', me.streak, N(s.streak)], ['Campañas cumplidas', me.goalsDone, N(s.goalsDone)]];
   const wa = rows.filter(r => r[1] > r[2]).length, wb = rows.filter(r => r[2] > r[1]).length;
   const lifts = Object.keys(me.lifts).filter(n => s.lifts && s.lifts[n]).sort((a, b) => (me.lifts[b] + s.lifts[b]) - (me.lifts[a] + s.lifts[a])).slice(0, 10);
   const chips = rivals.length > 1 ? `<div class="chips" style="margin-bottom:14px">${rivals.map(r => `<button class="chip ${r.user_id === rv.user_id ? 'on' : ''}" data-act="arena-rival" data-id="${r.user_id}">${esc(r.name)}</button>`).join('')}</div>` : '';
-  box.innerHTML = `${chips}
+  box.innerHTML = `${groupCard()}${chips}
   <div class="card gold"><div class="vs"><b class="gold-t">Tú</b><span class="x">VS</span><b class="rival-t">${esc(rv.name)}</b></div>
     <div class="score" style="margin-top:14px">${wa} — ${wb}<small>Marcador del duelo</small></div></div>
   <div class="card">${rows.map(r => duelRow(...r)).join('')}</div>
@@ -1155,6 +1170,29 @@ const shareBlob = () => new Promise(res => ui.shareCanvas ? ui.shareCanvas.toBlo
 function downloadBlob(b, name) { const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
 
 const ACTIONS = {
+  'grp-create': async () => {
+    if (!confirm('Vas a crear un grupo privado: solo vas a ver a quienes entren con tu código, y dejás de aparecer en la Arena abierta.')) return;
+    state.profile = { ...state.profile, grupo: newGroupCode() }; save(); await pushProfile(); toast('Grupo creado. Tocá “Invitar” para compartir el código.'); afterArena();
+  },
+  'grp-join': () => openModal(`<h2 style="margin-top:0">Unirme a un grupo</h2><p class="sub">Escribí el código de 8 caracteres que te pasaron.</p>
+    <label for="grp_c">Código</label><input id="grp_c" maxlength="9" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD 2345" style="text-transform:uppercase;letter-spacing:.12em">
+    <div class="err" id="grp_err"></div>
+    <div class="row" style="margin-top:12px"><button class="btn-ghost grow" data-act="modal-close">Cancelar</button><button class="btn-primary grow" data-act="grp-join-ok">Unirme</button></div>`),
+  'grp-join-ok': async () => {
+    const c = String(mv('grp_c') || '').toUpperCase().replace(/[\s-]/g, '');
+    if (!GRP_RE.test(c)) { $('#grp_err').textContent = 'El código tiene 8 letras o números.'; return; }
+    state.profile = { ...state.profile, grupo: c }; save(); closeModal(); await pushProfile(); toast('Entraste al grupo'); afterArena();
+  },
+  'grp-leave': async () => {
+    if (!confirm('¿Salir del grupo? Vas a volver a la Arena abierta. Podés volver a entrar con el código.')) return;
+    const p = { ...state.profile }; delete p.grupo; state.profile = p; save(); await pushProfile(); toast('Saliste del grupo'); afterArena();
+  },
+  'grp-invite': async () => {
+    const g = state.profile?.grupo; if (!g) return;
+    const txt = `Sumate a mi grupo en Imperium Gladiador. Código: ${g}\n${location.origin + location.pathname}`;
+    try { if (navigator.share) { await navigator.share({ title: 'Imperium Gladiador', text: txt }); return; } } catch (e) { if (e?.name === 'AbortError') return; }
+    try { await navigator.clipboard.writeText(txt); toast('Invitación copiada. Pegala en un chat.'); } catch { toast('Código: ' + g); }
+  },
   'share-open': el => shareSession(el.dataset.id),
   'share-dismiss': () => { ui.justDone = null; render(true); },
   'share-save': async () => { const b = await shareBlob(); if (b) { downloadBlob(b, ui.shareName); toast('Imagen guardada'); } },
