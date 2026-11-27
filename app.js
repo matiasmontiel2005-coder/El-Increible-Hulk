@@ -58,6 +58,57 @@ const TABS = [
   ['correr', 'Correr', ICON('<circle cx="15" cy="4.6" r="1.8"/><path d="M13.3 8.2 11 13.2"/><path d="M12.9 8.6l3.6 1.1 1.7 2.4"/><path d="M12.6 9l-3.1.4-2 1.9"/><path d="M11 13.2l3.4 2.3-.5 4.7"/><path d="M11 13.2l-2.5 3.2-3.5 1"/>')]
 ];
 
+/* ---------- Rutinas listas para usar ---------- */
+// Cada día: [nombre, [[ejercicio, series, reps], ...]]. Los pesos quedan vacíos: se completan en el primer entrenamiento.
+const OBJ = { fuerza: 'Ganar fuerza', musculo: 'Ganar músculo', peso: 'Bajar de peso', activo: 'Mantenerme activo' };
+const TPL_DAYS = {
+  fbA: ['Cuerpo completo A', [['Sentadilla', 3, 8], ['Press de banca', 3, 8], ['Remo con barra', 3, 8], ['Press militar', 3, 10], ['Plancha (seg)', 3, 30]]],
+  fbB: ['Cuerpo completo B', [['Peso muerto', 3, 5], ['Press inclinado con mancuernas', 3, 10], ['Jalón al pecho', 3, 10], ['Zancadas', 3, 10], ['Curl con mancuernas', 3, 12]]],
+  ini: ['Cuerpo completo en máquinas', [['Prensa', 3, 12], ['Press en máquina', 3, 12], ['Jalón al pecho', 3, 12], ['Remo en polea baja', 3, 12], ['Elevación de piernas', 3, 12]]],
+  tor: ['Torso', [['Press de banca', 4, 6], ['Remo con barra', 4, 8], ['Press de hombros con mancuernas', 3, 10], ['Jalón al pecho', 3, 10], ['Curl con barra', 3, 12], ['Extensión en polea', 3, 12]]],
+  pie: ['Pierna', [['Sentadilla', 4, 6], ['Peso muerto rumano', 3, 8], ['Prensa', 3, 10], ['Curl femoral', 3, 12], ['Elevación de gemelos', 4, 15], ['Plancha (seg)', 3, 40]]],
+  emp: ['Empuje', [['Press de banca', 4, 8], ['Press militar', 3, 8], ['Press inclinado con mancuernas', 3, 10], ['Elevaciones laterales', 3, 15], ['Extensión en polea', 3, 12]]],
+  tir: ['Tirón', [['Dominadas', 4, 6], ['Remo con barra', 4, 8], ['Remo en polea baja', 3, 10], ['Face pull', 3, 15], ['Curl con barra', 3, 10], ['Curl martillo', 3, 12]]],
+  pie2: ['Pierna', [['Sentadilla', 4, 8], ['Peso muerto rumano', 3, 10], ['Zancadas', 3, 10], ['Extensión de cuádriceps', 3, 12], ['Elevación de gemelos', 4, 15]]]
+};
+const TEMPLATES = [
+  { id: 'ini2', name: 'Primeros pasos', days: 2, desc: 'Lunes y jueves. Máquinas guiadas, ideal para empezar.', week: { 0: 'ini', 3: 'ini' } },
+  { id: 'fb3', name: 'Cuerpo completo', days: 3, desc: 'Lunes, miércoles y viernes. Todo el cuerpo en cada sesión.', week: { 0: 'fbA', 2: 'fbB', 4: 'fbA' } },
+  { id: 'tp4', name: 'Torso y pierna', days: 4, desc: 'Lunes, martes, jueves y viernes. Más volumen por grupo.', week: { 0: 'tor', 1: 'pie', 3: 'tor', 4: 'pie' } },
+  { id: 'ppl6', name: 'Empuje, tirón y pierna', days: 6, desc: 'De lunes a sábado. Para quien ya entrena seguido.', week: { 0: 'emp', 1: 'tir', 2: 'pie2', 3: 'emp', 4: 'tir', 5: 'pie2' } }
+];
+function applyTemplate(id) {
+  const t = TEMPLATES.find(x => x.id === id); if (!t) return false;
+  state.routine = {};
+  for (const [d, k] of Object.entries(t.week)) {
+    const [name, items] = TPL_DAYS[k];
+    state.routine[d] = { name, items: items.map(([ex, n, r]) => ({ id: uid(), exId: 'c:' + ex, sets: Array.from({ length: n }, () => ({ r, w: null })) })) };
+  }
+  return true;
+}
+const tplCard = (t, sel) => `<button class="tpl ${sel ? 'on' : ''}" data-act="${sel === undefined ? 'tpl-apply' : 'ob-tpl'}" data-id="${t.id}"><span class="tpl-n">${t.days}<small>días</small></span><span class="grow"><b>${t.name}</b><span>${t.desc}</span></span></button>`;
+const needsOnboarding = () => !state.settings.onboarded && !state.sessions.length && !state.runs.length && !state.walks.length && !state.matches.length && !Object.values(state.routine).some(r => r.items?.length);
+function obSheet() {
+  const o = ui.ob || (ui.ob = { step: 0, name: state.profile.name || user?.user_metadata?.name || '', goal: state.profile.goal || '', tpl: '' });
+  const dots = `<div class="ob-dots" aria-hidden="true">${[0, 1, 2].map(i => `<i class="${i <= o.step ? 'on' : ''}"></i>`).join('')}</div>`;
+  const skip = '<button class="btn-ghost btn-sm ob-skip" data-act="ob-skip">Saltar</button>';
+  if (o.step === 0) return `<div class="row between">${dots}${skip}</div><h2 style="margin-top:14px">Bienvenido al Coliseo</h2>
+    <p class="sub">En tres pasos dejás la app lista para tu primer entrenamiento.</p>
+    <label for="ob_n">¿Cómo te llamamos?</label><input id="ob_n" maxlength="24" autocomplete="nickname" placeholder="Tu nombre de gladiador" value="${esc(o.name)}">
+    <button class="btn-primary btn-block" style="margin-top:18px" data-act="ob-next">Continuar</button>`;
+  if (o.step === 1) return `<div class="row between">${dots}${skip}</div><h2 style="margin-top:14px">¿Qué querés lograr?</h2>
+    <p class="sub">Lo usamos para sugerirte una rutina. Podés cambiarla cuando quieras.</p>
+    <div class="ob-goals">${Object.entries(OBJ).map(([k, n]) => `<button class="chip ${o.goal === k ? 'on' : ''}" data-act="ob-goal" data-g="${k}">${n}</button>`).join('')}</div>
+    <div class="row" style="margin-top:18px"><button class="btn-ghost grow" data-act="ob-back">Atrás</button><button class="btn-primary grow" data-act="ob-next" ${o.goal ? '' : 'disabled'}>Continuar</button></div>`;
+  const sug = { fuerza: 'tp4', musculo: 'ppl6', peso: 'fb3', activo: 'ini2' }[o.goal] || 'fb3';
+  if (!o.tpl) o.tpl = sug;
+  return `<div class="row between">${dots}${skip}</div><h2 style="margin-top:14px">Elegí tu rutina</h2>
+    <p class="sub">Te marcamos la que mejor va con tu objetivo. Después podés editar ejercicios, series y pesos.</p>
+    <div class="tpls">${TEMPLATES.map(t => tplCard(t, t.id === o.tpl)).join('')}<button class="tpl ${o.tpl === 'none' ? 'on' : ''}" data-act="ob-tpl" data-id="none"><span class="tpl-n">+</span><span class="grow"><b>Armarla yo</b><span>Empezás con la semana vacía.</span></span></button></div>
+    <div class="row" style="margin-top:18px"><button class="btn-ghost grow" data-act="ob-back">Atrás</button><button class="btn-primary grow" data-act="ob-done">Empezar</button></div>`;
+}
+const obOpen = () => openModal(obSheet(), !!$('#modal .sheet'));
+
 /* ---------- Utilidades ---------- */
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -180,7 +231,9 @@ function sanitizeState(raw) {
   }).filter(Boolean);
   d.active = raw.active ? sanSession(raw.active) : null;
   d.settings = { rest: Math.round(SAN.num(raw.settings?.rest, 10, 600, 90)), lastBackup: SAN.num(raw.settings?.lastBackup, 0, 4e12, 0) };
+  if (raw.settings?.onboarded === true) d.settings.onboarded = true;
   d.profile = { name: SAN.str(raw.profile?.name, 24), share: raw.profile?.share !== false };
+  if (Object.hasOwn(OBJ, raw.profile?.goal)) d.profile.goal = raw.profile.goal;
   return d;
 }
 // Datos públicos de otra persona (Arena): solo números acotados y textos cortos.
@@ -518,7 +571,7 @@ V.rutina = () => {
   const d = ui.routineDay, r = state.routine[d] || { name: '', items: [] };
   const chips = DAYS.map((n, i) => `<button class="chip ${i === d ? 'on' : ''}" data-act="rday" data-day="${i}">${DAY_S[i]}${state.routine[i]?.items?.length ? ' •' : ''}</button>`).join('');
   return `
-  <h1>Rutina semanal</h1><p class="sub">Diseñá cada día de tu entrenamiento: ejercicios, series, repeticiones y peso objetivo.</p>
+  <div class="row between" style="align-items:flex-start"><h1>Rutina semanal</h1><button class="btn-sm" data-act="tpl-open">Rutinas listas</button></div><p class="sub">Diseñá cada día: ejercicios, series, repeticiones y peso objetivo.</p>
   <div class="chips" style="margin-bottom:12px">${chips}</div>
   <div class="card">
     <label style="margin-top:0">${DAYS[d]} — nombre del día (opcional)</label>
@@ -975,6 +1028,7 @@ function render(keepScroll = false) {
   if (name === 'progreso') afterProgreso();
   if (name === 'correr') afterCorrer();
   if (name === 'arena') afterArena();
+  if (name === 'foro' && needsOnboarding() && $('#modal').classList.contains('hidden')) obOpen();
 }
 
 /* ---------- Acciones ---------- */
@@ -1062,6 +1116,24 @@ const ACTIONS = {
   rdel: el => { const r = ensureDay(ui.routineDay); r.items = r.items.filter(i => i.id !== el.dataset.id); save(); render(true); },
   rup: el => moveItem(el.dataset.id, -1), rdown: el => moveItem(el.dataset.id, 1),
   rcopy: () => openModal(`<h2 style="margin-top:0">Copiar ${DAYS[ui.routineDay]} a…</h2><div class="chips" style="flex-wrap:wrap">${DAYS.map((n, i) => i === ui.routineDay ? '' : `<button class="chip" data-act="rcopy-to" data-day="${i}">${n}</button>`).join('')}</div><p class="muted small">Reemplaza el contenido del día elegido.</p>`),
+  'ob-next': () => { const o = ui.ob; if (o.step === 0) o.name = SAN.str(val('ob_n') || '', 24).trim(); if (o.step === 1 && !o.goal) return; o.step++; obOpen(); },
+  'ob-back': () => { ui.ob.step = Math.max(0, ui.ob.step - 1); obOpen(); },
+  'ob-goal': el => { ui.ob.goal = el.dataset.g; ui.ob.tpl = ''; obOpen(); },
+  'ob-tpl': el => { ui.ob.tpl = el.dataset.id; obOpen(); },
+  'ob-skip': () => { state.settings.onboarded = true; save(); ui.ob = null; closeModal(); },
+  'ob-done': () => {
+    const o = ui.ob; state.settings.onboarded = true;
+    state.profile = { ...state.profile, ...(o.name ? { name: o.name } : {}), ...(o.goal ? { goal: o.goal } : {}) };
+    const ok = o.tpl && o.tpl !== 'none' && applyTemplate(o.tpl);
+    save(); ui.ob = null; closeModal();
+    if (ok) { ui.routineDay = +Object.keys(state.routine)[0]; toast('Rutina lista. Revisala y ajustá los pesos.'); location.hash = '#/rutina'; } else render(true);
+  },
+  'tpl-open': () => openModal(`<h2 style="margin-top:0">Rutinas listas para usar</h2><p class="sub">Reemplaza toda tu semana. Los pesos quedan vacíos y se completan en tu primer entrenamiento.</p><div class="tpls">${TEMPLATES.map(t => tplCard(t)).join('')}</div><button class="btn-ghost btn-block" style="margin-top:12px" data-act="modal-close">Cancelar</button>`),
+  'tpl-apply': el => {
+    const has = Object.values(state.routine).some(r => r.items?.length);
+    if (has && !confirm('Esto reemplaza tu rutina de toda la semana. ¿Continuar?')) return;
+    applyTemplate(el.dataset.id); save(); closeModal(); ui.routineDay = +Object.keys(state.routine)[0]; toast('Rutina aplicada'); render(true);
+  },
   'rcopy-to': el => { const src = ensureDay(ui.routineDay); state.routine[+el.dataset.day] = { name: src.name, items: src.items.map(i => ({ ...i, id: uid(), sets: i.sets.map(t => ({ ...t })) })) }; save(); closeModal(); toast('Día copiado'); render(true); },
 
   // entrenar
@@ -1244,7 +1316,7 @@ async function authSubmit(isSignup) {
 /* ---------- Eventos ---------- */
 document.addEventListener('click', ev => {
   const el = ev.target.closest('[data-act]'); if (el) { if (el.type === 'submit') ev.preventDefault(); ACTIONS[el.dataset.act]?.(el, ev); return; }
-  if (ev.target.id === 'modal') closeModal();
+  if (ev.target.id === 'modal') { if (ui.ob) ACTIONS['ob-skip'](); else closeModal(); }
 });
 document.addEventListener('submit', ev => { if (ev.target.id === 'authform') ev.preventDefault(); });
 document.addEventListener('input', ev => {
