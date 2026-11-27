@@ -867,7 +867,40 @@ V.ajustes = () => `
     <input type="file" id="impfile" accept="application/json" class="hidden"></div>
   <div class="card red"><h3 class="red-t">Zona de peligro</h3><p class="muted small">Borra todos los datos de este dispositivo${user ? ' y de tu cuenta' : ''}. No se puede deshacer.</p>
     <button class="btn-danger" data-act="wipe">Borrar todo</button></div>
-  <p class="muted small center" style="margin-top:20px">Imperium Gladiador · v1</p>`;
+  <p class="muted small center" style="margin-top:20px"><a class="gold-t" href="#/legal">Privacidad y términos</a></p>
+  <p class="muted small center">Imperium Gladiador · v1</p>`;
+
+/* --- Privacidad y términos --- */
+V.legal = () => {
+  const who = SAN.str(CFG.LEGAL_NAME || '', 80) || 'el responsable de esta instalación de Imperium Gladiador';
+  const mail = /^[^\s@<>"]{1,64}@[^\s@<>"]+\.[^\s@<>"]{2,}$/.test(CFG.CONTACT_EMAIL || '') ? CFG.CONTACT_EMAIL : '';
+  const contact = mail ? `<a class="gold-t" href="mailto:${esc(mail)}">${esc(mail)}</a>` : 'el contacto que te dio quien te invitó a usar la app';
+  const back = needAuth() ? '#/auth' : '#/ajustes';
+  return `<article class="legal"><a class="legal-back" href="${back}">‹ Volver</a><h1>Privacidad y términos</h1><p class="sub">Última actualización: noviembre de 2026. Responsable: ${esc(who)}.</p>
+  <h2>Qué datos guardamos</h2>
+  <ul><li><b>Cuenta:</b> tu email y tu contraseña (la contraseña se guarda cifrada por el proveedor de autenticación; nadie puede leerla).</li>
+  <li><b>Entrenamiento:</b> rutinas, series, carreras, caminatas, partidos, campañas y, si las cargás, tu peso corporal y medidas.</li>
+  <li><b>Perfil de la Arena:</b> tu nombre de gladiador, tu objetivo y el código de grupo si entrás a uno.</li></ul>
+  <p>No usamos cookies de seguimiento, publicidad ni herramientas de analítica. La app no pide tu ubicación ni tus contactos.</p>
+  <h2>Dónde se guardan</h2>
+  <p>Primero en tu dispositivo. Si usás una cuenta, también en una base de datos de Supabase, donde cada fila está protegida para que solo vos puedas leerla y modificarla. Si usás la app sin cuenta, los datos no salen de tu dispositivo.</p>
+  <h2>Qué ven otras personas</h2>
+  <p>Si tenés activado “Compartir mi progreso”, quienes estén en tu mismo grupo (o en la Arena abierta, si no estás en un grupo) ven un resumen: tu nombre, rango y gloria, sesiones y kilómetros de los últimos 30 días, récords, constancia, campañas cumplidas, tu carga máxima por ejercicio y tus últimas 10 carreras, caminatas y partidos. <b>Nunca</b> se comparten tu email, tu peso corporal, tus medidas ni tu rutina. Podés dejar de compartir en Ajustes cuando quieras.</p>
+  <h2>Para qué los usamos</h2>
+  <p>Solo para que la app funcione: mostrarte tu progreso, sincronizar tus dispositivos y armar la Arena. No vendemos ni cedemos tus datos a terceros.</p>
+  <h2>Tus derechos</h2>
+  <ul><li><b>Acceder y llevarte tus datos:</b> Ajustes → Respaldo → Exportar JSON.</li>
+  <li><b>Corregirlos:</b> desde la app podés editar o borrar cualquier registro.</li>
+  <li><b>Borrarlos:</b> Ajustes → Zona de peligro → Borrar todo elimina tus registros del dispositivo y de tu cuenta. Para eliminar también la cuenta y tu perfil de la Arena, escribí a ${contact}.</li></ul>
+  <p>En Argentina, la Agencia de Acceso a la Información Pública es el órgano de control de la Ley 25.326 de Protección de Datos Personales; podés presentar un reclamo ante ella.</p>
+  <h2>Términos de uso</h2>
+  <ul><li>Imperium Gladiador es una herramienta para registrar entrenamientos. <b>No es asesoramiento médico.</b> Las rutinas sugeridas son generales: consultá a un profesional antes de empezar o si tenés alguna lesión o condición de salud, y entrená bajo tu propia responsabilidad.</li>
+  <li>Sos responsable de lo que publicás en tu nombre de gladiador. No uses nombres ofensivos ni que se hagan pasar por otra persona; podemos quitar perfiles que lo hagan.</li>
+  <li>Cuidá tu contraseña y tu código de grupo: quien tenga el código puede entrar al grupo.</li>
+  <li>Hacemos lo posible para que la app funcione y tus datos estén seguros, pero se ofrece “tal cual”. Te recomendamos descargar un respaldo cada tanto.</li>
+  <li>Podemos actualizar estos términos; si el cambio es importante, te lo vamos a avisar en la app.</li></ul>
+  </article>`;
+};
 
 /* --- Auth --- */
 V.auth = () => {
@@ -883,7 +916,8 @@ V.auth = () => {
     <div class="err" id="a_err" role="status"></div>
     <button class="btn-primary btn-block" type="submit" data-act="${up ? 'signup' : 'login'}" style="margin-top:4px">${up ? 'Crear cuenta' : 'Entrar'}</button>
   </form></div>
-  <button class="btn-ghost btn-block auth-local" data-act="local-mode">Usar sin cuenta, solo en este dispositivo</button></div>`;
+  <button class="btn-ghost btn-block auth-local" data-act="local-mode">Usar sin cuenta, solo en este dispositivo</button>
+  <p class="legal-note">${up ? 'Al crear tu cuenta aceptás los' : 'Al usar la app aceptás los'} <a href="#/legal">términos y la política de privacidad</a>.</p></div>`;
 };
 
 
@@ -1029,8 +1063,8 @@ function render(keepScroll = false) {
   const slide = !keepScroll && !!ui.lastRoute && ui.lastRoute !== target && r !== 'auth' && !needAuth();
   const ghost = slide ? Motion.ghost($('#view')) : null; // captura la pantalla actual antes de reemplazarla
   killCharts();
-  const authMode = needAuth() || r === 'auth';
-  $('.top').classList.toggle('hidden', authMode); $('#tabs').classList.toggle('hidden', authMode);
+  const authMode = (needAuth() || r === 'auth') && r !== 'legal';
+  const bare = authMode || (r === 'legal' && needAuth()); $('.top').classList.toggle('hidden', bare); $('#tabs').classList.toggle('hidden', bare);
   const view = $('#view');
   if (authMode) { view.innerHTML = V.auth(); return; }
   const name = V[r] && !r.startsWith('prog_') ? r : 'foro';

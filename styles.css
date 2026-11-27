@@ -396,3 +396,13 @@ button, .btn, .chip, .tabs a { position: relative; overflow: hidden; }
 .grp-acts { display: flex; gap: 8px; align-self: center; }
 .grp-code { margin-top: 8px; font-family: var(--num); font-stretch: 85%; font-weight: 650; font-size: 26px; letter-spacing: .14em; color: var(--accent); }
 .duel-bar.z i, .duel-bar.z i.r { background: var(--line); }
+/* Privacidad y términos */
+.legal { max-width: 62ch; }
+.legal-back { display: inline-block; color: var(--muted); text-decoration: none; margin-bottom: 14px; font-size: 14px; }
+.legal h2 { margin-top: 28px; }
+.legal p, .legal li { color: var(--g4); font-size: 15px; line-height: 1.6; }
+.legal ul { padding-left: 20px; margin: 0; }
+.legal li { margin-bottom: 8px; }
+.legal b { color: var(--text); }
+.legal-note { margin: 18px auto 0; font-size: 13px; color: var(--muted); max-width: 34ch; line-height: 1.5; }
+.legal-note a { color: var(--g4); }
