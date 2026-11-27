@@ -680,7 +680,8 @@ function liveView() {
 V.progreso = () => {
   const seg = [['fuerza', 'Fuerza'], ['cuerpo', 'Cuerpo'], ['constancia', 'Constancia']]
     .map(([k, n]) => `<button class="${ui.progTab === k ? 'on' : ''}" data-act="ptab" data-t="${k}">${n}</button>`).join('');
-  return `<h1>Progreso</h1><p class="sub">Tus gráficos se actualizan solos con cada registro.</p><div class="seg" style="margin-bottom:14px">${seg}</div>${V['prog_' + ui.progTab]()}`;
+  const jd = ui.justDone && state.sessions.find(x => x.id === ui.justDone);
+  return `<h1>Progreso</h1><p class="sub">Tus gráficos se actualizan solos con cada registro.</p>${jd ? `<div class="card gold share-cta"><div class="grow"><h3>Entrenamiento terminado</h3><div class="muted small">Compartilo como imagen con tu resumen y tus récords.</div></div><button class="btn-primary btn-sm" data-act="share-open" data-id="${jd.id}">Compartir</button><button class="btn-ghost icon-btn" data-act="share-dismiss" aria-label="Cerrar aviso">✕</button></div>` : ''}<div class="seg" style="margin-bottom:14px">${seg}</div>${V['prog_' + ui.progTab]()}`;
 };
 V.prog_fuerza = () => {
   const withHist = allEx().filter(e => exHistory(e.id).length);
@@ -1096,10 +1097,73 @@ async function finishSession() {
   location.hash = '#/progreso'; ui.progTab = 'fuerza'; if (entries[0]) ui.exId = entries[0].exId;
   render();
   const msg = a.edit ? 'Entrenamiento actualizado.' : prs.length ? `¡Nuevo récord en ${prs.map(exName).join(', ')}!` : 'Entrenamiento registrado. Si lo cerraste sin querer, reabrilo desde Entrenar → Historial.';
+  if (!a.edit) ui.justDone = a.id;
   toast(subidas ? `${msg} Subieron las metas de ${subidas} serie${subidas === 1 ? '' : 's'} en tu rutina.` : msg, 5200);
 }
 
+/* ---------- Tarjeta para compartir un entrenamiento (imagen 1080 × 1350, formato de Instagram) ---------- */
+async function shareCard(s) {
+  const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'); if (!g) return null;
+  try { await Promise.all(['700 64px Cinzel', '500 40px Cinzel', '650 60px Archivo', '500 30px Archivo'].map(f => document.fonts.load(f))); } catch { /* usa la de sistema */ }
+  const logo = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = 'icons/icon-192.png'; });
+  const F = (w, px, fam = 'Archivo', st = '') => `${st}${w} ${px}px ${fam === 'Cinzel' ? '"Cinzel", serif' : '"Archivo", system-ui, sans-serif'}`;
+  const fit = (t, max) => { if (g.measureText(t).width <= max) return t; while (t.length > 1 && g.measureText(t + '…').width > max) t = t.slice(0, -1); return t + '…'; };
+  g.fillStyle = '#111111'; g.fillRect(0, 0, W, H);
+  const grd = g.createRadialGradient(W * .85, -100, 50, W * .85, -100, 900); grd.addColorStop(0, 'rgba(255,92,34,.28)'); grd.addColorStop(1, 'rgba(255,92,34,0)'); g.fillStyle = grd; g.fillRect(0, 0, W, H);
+  g.fillStyle = '#FF5C22'; g.fillRect(0, 0, W, 10);
+  const P = 80;
+  if (logo) { g.save(); g.beginPath(); g.roundRect(P, 86, 84, 84, 20); g.clip(); g.drawImage(logo, P, 86, 84, 84); g.restore(); }
+  g.fillStyle = '#F2F2F2'; g.font = F(500, 34, 'Cinzel'); g.letterSpacing = '12px'; g.fillText('IMPERIUM', P + 110, 140); g.letterSpacing = '0px';
+  const d = pd(s.date).toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+  g.fillStyle = '#A1A1A1'; g.font = F(500, 32); g.fillText(d.charAt(0).toUpperCase() + d.slice(1), P, 280);
+  g.fillStyle = '#FFFFFF'; g.font = F(700, 76, 'Cinzel'); g.fillText(fit(s.name, W - 2 * P), P, 370);
+  const sets = s.entries.reduce((a, e) => a + e.sets.length, 0), vol = s.entries.reduce((a, e) => a + e.sets.reduce((b, x) => b + (x.w || 0) * (x.r || 0), 0), 0);
+  const stats = [[s.dur ? fmtMin(s.dur) : '—', 'Duración'], [String(sets), 'Series'], [vol >= 1000 ? fmtN(vol / 1000) + ' t' : fmtN(Math.round(vol)) + ' kg', 'Levantado']];
+  const cw = (W - 2 * P - 40) / 3;
+  stats.forEach(([v, l], i) => { const x = P + i * (cw + 20); g.fillStyle = '#1b1b1b'; g.beginPath(); g.roundRect(x, 430, cw, 170, 26); g.fill();
+    g.fillStyle = '#FFFFFF'; g.font = 'condensed ' + F(650, 64); g.fillText(fit(v, cw - 56), x + 28, 525); g.fillStyle = '#A1A1A1'; g.font = F(500, 28); g.fillText(l, x + 28, 570); });
+  let y = 690; g.fillStyle = '#F2F2F2'; g.font = F(650, 34); g.fillText('Mejor serie de cada ejercicio', P, y); y += 30;
+  const rows = s.entries.slice(0, 6);
+  rows.forEach(e => {
+    const b = e.sets.reduce((m, x) => (x.w || 0) > (m.w || 0) || ((x.w || 0) === (m.w || 0) && (x.r || 0) > (m.r || 0)) ? x : m, e.sets[0]);
+    y += 78; g.strokeStyle = '#262626'; g.lineWidth = 2; g.beginPath(); g.moveTo(P, y - 52); g.lineTo(W - P, y - 52); g.stroke();
+    const pr = s.prs?.includes(e.exId), right = `${fmtN(b.w || 0)} kg × ${b.r || 0}`;
+    g.font = 'condensed ' + F(650, 44); const rw = g.measureText(right).width; g.fillStyle = '#FFFFFF'; g.fillText(right, W - P - rw, y);
+    let lx = P; g.font = F(500, 34); const maxN = W - 2 * P - rw - (pr ? 120 : 30);
+    g.fillStyle = '#E6E6E6'; const nm = fit(exName(e.exId), maxN); g.fillText(nm, lx, y);
+    if (pr) { lx += g.measureText(nm).width + 18; g.fillStyle = '#FF5C22'; g.beginPath(); g.roundRect(lx, y - 32, 76, 40, 10); g.fill(); g.fillStyle = '#111111'; g.font = F(700, 24); g.fillText('PR', lx + 21, y - 4); }
+  });
+  if (s.entries.length > rows.length) { y += 56; g.fillStyle = '#777777'; g.font = F(500, 28); g.fillText(`y ${s.entries.length - rows.length} ejercicio${s.entries.length - rows.length === 1 ? '' : 's'} más`, P, y); }
+  const x = xpInfo();
+  g.fillStyle = '#FF5C22'; g.font = F(700, 64, 'Cinzel'); g.fillText(x.roman, P, H - 92);
+  const rx = P + g.measureText(x.roman).width + 24; g.fillStyle = '#F2F2F2'; g.font = F(500, 30, 'Cinzel'); g.letterSpacing = '6px'; g.fillText(x.rank.name.toUpperCase(), rx, H - 112); g.letterSpacing = '0px';
+  g.fillStyle = '#A1A1A1'; g.font = F(500, 26); g.fillText(fit(profileName(), 420), rx, H - 74);
+  g.textAlign = 'right'; g.fillStyle = '#777777'; g.font = F(500, 26); g.fillText('Imperium Gladiador', W - P, H - 74); g.textAlign = 'left';
+  return c;
+}
+async function shareSession(id) {
+  const s = state.sessions.find(x => x.id === id); if (!s) return;
+  const c = await shareCard(s); if (!c) return toast('No se pudo crear la imagen');
+  ui.shareCanvas = c; ui.shareName = `imperium-${s.date}.png`;
+  openModal(`<h2 style="margin-top:0">Compartir entrenamiento</h2><p class="sub">Una imagen con tu resumen y tus récords, lista para historias o chats.</p><div class="share-prev"></div>
+    <div class="row" style="margin-top:14px"><button class="btn-ghost grow" data-act="share-save">Guardar imagen</button>${navigator.canShare ? '<button class="btn-primary grow" data-act="share-send">Compartir</button>' : ''}</div>
+    <button class="btn-ghost btn-block" style="margin-top:8px" data-act="modal-close">Cerrar</button>`);
+  const box = $('#modal .share-prev'); if (box) box.appendChild(c);
+}
+const shareBlob = () => new Promise(res => ui.shareCanvas ? ui.shareCanvas.toBlob(res, 'image/png') : res(null));
+function downloadBlob(b, name) { const u = URL.createObjectURL(b), a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 4000); }
+
 const ACTIONS = {
+  'share-open': el => shareSession(el.dataset.id),
+  'share-dismiss': () => { ui.justDone = null; render(true); },
+  'share-save': async () => { const b = await shareBlob(); if (b) { downloadBlob(b, ui.shareName); toast('Imagen guardada'); } },
+  'share-send': async () => {
+    const b = await shareBlob(); if (!b) return;
+    const f = new File([b], ui.shareName, { type: 'image/png' });
+    try { if (navigator.canShare?.({ files: [f] })) await navigator.share({ files: [f], title: 'Mi entrenamiento' }); else { downloadBlob(b, ui.shareName); toast('Tu navegador no comparte imágenes: la guardamos'); } }
+    catch (e) { if (e?.name !== 'AbortError') { downloadBlob(b, ui.shareName); } }
+  },
   'modal-close': closeModal,
   'rest+': () => { if (rest) rest.end += 15000; tickRest(); },
   'rest-stop': stopRest,
@@ -1173,7 +1237,8 @@ const ACTIONS = {
     const s = state.sessions.find(x => x.id === el.dataset.id); if (!s) return;
     openModal(`<h2 style="margin-top:0">${esc(s.name)}</h2><p class="sub">${fmtD(s.date)}${s.dur ? ' · ' + s.dur + ' min' : ''}</p>
       ${s.entries.map(e => `<div class="list-item"><div class="grow"><b>${esc(exName(e.exId))}</b>${s.prs?.includes(e.exId) ? '<span class="pr">PR</span>' : ''}<div class="muted small">${e.sets.map(x => `${fmtN(x.w)}kg×${x.r}`).join(' · ')}</div></div></div>`).join('')}
-      <button class="btn-primary btn-block" style="margin-top:12px" data-act="sess-reopen" data-id="${s.id}">Reabrir y editar</button>
+      <button class="btn-primary btn-block" style="margin-top:12px" data-act="share-open" data-id="${s.id}">Compartir como imagen</button>
+      <button class="btn-block" style="margin-top:8px" data-act="sess-reopen" data-id="${s.id}">Reabrir y editar</button>
       <div class="row" style="margin-top:8px"><button class="btn-ghost grow" data-act="modal-close">Cerrar</button><button class="btn-danger grow" data-act="sess-del" data-id="${s.id}">Eliminar</button></div>`);
   },
   'hist-more': () => { ui.histN = (ui.histN || 6) + 20; render(true); },
