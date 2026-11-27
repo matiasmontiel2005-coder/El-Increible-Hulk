@@ -20,7 +20,7 @@ python3 -m http.server 8000   # y abrí http://localhost:8000
 ## Publicar como app instalable (GitHub Pages)
 1. Mergeá esta rama a `main`.
 2. En GitHub: **Settings → Pages → Build and deployment → Deploy from a branch → `main` / `(root)`**.
-3. Abrí `https://<tu-usuario>.github.io/El-Increible-Hulk/` en el celular y elegí **Instalar app / Agregar a pantalla de inicio**.
+3. Abrí `https://<tu-usuario>.github.io/Imperium-Gladiador/` en el celular y elegí **Instalar app / Agregar a pantalla de inicio**.
 
 ## Activar cuenta y sincronización (Supabase)
 1. Creá un proyecto gratis en https://supabase.com.
