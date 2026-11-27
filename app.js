@@ -89,12 +89,12 @@ function applyTemplate(id) {
   return true;
 }
 const tplCard = (t, sel) => `<button class="tpl ${sel ? 'on' : ''}" data-act="${sel === undefined ? 'tpl-apply' : 'ob-tpl'}" data-id="${t.id}"><span class="tpl-n">${t.days}<small>días</small></span><span class="grow"><b>${t.name}</b><span>${t.desc}</span></span></button>`;
-const needsOnboarding = () => !state.settings.onboarded && !state.sessions.length && !state.runs.length && !state.walks.length && !state.matches.length && !Object.values(state.routine).some(r => r.items?.length);
+const needsOnboarding = () => !(sb && user && !ui.synced) && !state.settings.onboarded && !state.sessions.length && !state.runs.length && !state.walks.length && !state.matches.length && !Object.values(state.routine).some(r => r.items?.length);
 function obSheet() {
   const o = ui.ob || (ui.ob = { step: 0, name: state.profile.name || user?.user_metadata?.name || '', goal: state.profile.goal || '', tpl: '' });
   const dots = `<div class="ob-dots" aria-hidden="true">${[0, 1, 2].map(i => `<i class="${i <= o.step ? 'on' : ''}"></i>`).join('')}</div>`;
   const skip = '<button class="btn-ghost btn-sm ob-skip" data-act="ob-skip">Saltar</button>';
-  if (o.step === 0) return `<div class="row between">${dots}${skip}</div><h2 style="margin-top:14px">Bienvenido al Coliseo</h2>
+  if (o.step === 0) return `<div class="row between">${dots}${skip}</div><h2 style="margin-top:14px">Te damos la bienvenida al Coliseo</h2>
     <p class="sub">En tres pasos dejás la app lista para tu primer entrenamiento.</p>
     <label for="ob_n">¿Cómo te llamamos?</label><input id="ob_n" maxlength="24" autocomplete="nickname" placeholder="Tu nombre de gladiador" value="${esc(o.name)}">
     <button class="btn-primary btn-block" style="margin-top:18px" data-act="ob-next">Continuar</button>`;
@@ -451,6 +451,7 @@ async function initialSync() {
       state = sanitizeState(remote); state.owner = user.id; save(false);
       await pushProfile(); setSyncBadge('ok');
     } else { await pushRemote(); }
+    ui.synced = true; // recién ahora se sabe si la cuenta ya tenía datos
   } catch (e) { dbg('sync', e); setSyncBadge(navigator.onLine ? 'err' : 'off'); }
   syncing = false;
 }
@@ -1154,6 +1155,7 @@ async function finishSession() {
 async function shareCard(s) {
   const W = 1080, H = 1350, c = document.createElement('canvas'); c.width = W; c.height = H;
   const g = c.getContext('2d'); if (!g) return null;
+  if (!g.roundRect) g.roundRect = function (x, y, w, h) { this.rect(x, y, w, h); }; // navegadores viejos: esquinas rectas
   try { await Promise.all(['700 64px Cinzel', '500 40px Cinzel', '650 60px Archivo', '500 30px Archivo'].map(f => document.fonts.load(f))); } catch { /* usa la de sistema */ }
   const logo = await new Promise(res => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = 'icons/icon-192.png'; });
   const F = (w, px, fam = 'Archivo', st = '') => `${st}${w} ${px}px ${fam === 'Cinzel' ? '"Cinzel", serif' : '"Archivo", system-ui, sans-serif'}`;
@@ -1193,7 +1195,8 @@ async function shareCard(s) {
 }
 async function shareSession(id) {
   const s = state.sessions.find(x => x.id === id); if (!s) return;
-  const c = await shareCard(s); if (!c) return toast('No se pudo crear la imagen');
+  let c = null; try { c = await shareCard(s); } catch (e) { dbg('share', e); }
+  if (!c) return toast('Tu navegador no pudo crear la imagen. Actualizalo e intentá de nuevo.');
   ui.shareCanvas = c; ui.shareName = `imperium-${s.date}.png`;
   openModal(`<h2 style="margin-top:0">Compartir entrenamiento</h2><p class="sub">Una imagen con tu resumen y tus récords, lista para historias o chats.</p><div class="share-prev"></div>
     <div class="row" style="margin-top:14px"><button class="btn-ghost grow" data-act="share-save">Guardar imagen</button>${navigator.canShare ? '<button class="btn-primary grow" data-act="share-send">Compartir</button>' : ''}</div>
